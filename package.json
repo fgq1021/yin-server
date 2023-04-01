@@ -1,0 +1,30 @@
+{
+  "name": "yin-core-server",
+  "version": "0.0.1",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc ",
+    "dev": "tsc -w "
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fgq1021/yin-server.git"
+  },
+  "author": "方冠乔",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/fgq1021/yin-server/issues"
+  },
+  "homepage": "https://github.com/fgq1021/yin-server#readme",
+  "devDependencies": {
+    "typescript": "^5.0.3"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.0",
+    "lodash": "^4.17.21",
+    "mongoose": "^7.0.3",
+    "yin-core": "^0.0.2"
+  }
+}
