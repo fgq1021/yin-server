@@ -1,11 +1,5 @@
 import {Schema, model} from "mongoose";
 import {yinStatus, Place, ResList, Key, schemaDashKey} from "yin-core";
-// import {parseJson} from "../lib/parse.json";
-// import {Place} from "./place";
-// import {ResList} from "./array";
-// import {difference} from 'lodash'
-// import {Key} from "./key";
-// import {schemaDashKey} from "../lib/schemaDashKey";
 
 export class ControllerServer {
     public name
