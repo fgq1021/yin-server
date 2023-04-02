@@ -12,12 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ControllerServer = void 0;
 const mongoose_1 = require("mongoose");
 const yin_core_1 = require("yin-core");
-// import {parseJson} from "../lib/parse.json";
-// import {Place} from "./place";
-// import {ResList} from "./array";
-// import {difference} from 'lodash'
-// import {Key} from "./key";
-// import {schemaDashKey} from "../lib/schemaDashKey";
 class ControllerServer {
     constructor(yin, module) {
         this.updateTimer = {};
@@ -121,7 +115,6 @@ class ControllerServer {
         return __awaiter(this, void 0, void 0, function* () {
             this.matchReg(filter);
             filter = this.otm(filter);
-            console.log(filter);
             const total = yield this.api.count(filter), listFinder = this.api.find(filter).sort(sort).skip(skip);
             if (limit > 0) {
                 listFinder.limit(limit);
@@ -180,12 +173,11 @@ class ControllerServer {
                     type = 'Object';
                 }
                 const pel = yield this.yin.get(place, user);
-                if (pel.$manageable(user)) {
+                if (yield pel.$manageable(user)) {
                     let key = pel.$schema[place.key];
                     if (!key) {
                         pel.$objectSchema.push(new yin_core_1.Key(place.key, type));
                         key = pel.$schema[place.key];
-                        // console.log(key)
                     }
                     if (key.type === 'Array') {
                         pel.$children[key.name] = pel.$children[key.name] || [];
@@ -193,7 +185,11 @@ class ControllerServer {
                     }
                     else
                         pel.$children[key.name] = oPlace;
-                    yield pel.$save(user);
+                    try {
+                        yield pel.$save(user);
+                    }
+                    catch (e) {
+                    }
                 }
             }
         });
@@ -201,7 +197,6 @@ class ControllerServer {
     save(o, option, user) {
         return __awaiter(this, void 0, void 0, function* () {
             o = this.otm(o);
-            console.log(o);
             const m = yield this.api.findOne({ _id: o._id });
             Object.assign(m, o);
             yield this.saveParse(o, user);

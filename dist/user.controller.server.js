@@ -62,24 +62,45 @@ class UserControllerServer extends controller_server_1.ControllerServer {
             return this.userParse(user);
         });
     }
-    create(el, user) {
+    saveParse(object, user) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (object.$password) {
+                object.$passwordHash = yield bcrypt.hash(String(object.$password), 10);
+                object.$passwordUpdateTime = new Date();
+                delete object.$password;
+            }
+            else {
+                delete object.$passwordHash;
+                delete object.$passwordUpdateTime;
+            }
+            if (user) {
+                object.$owner = user.$id;
+            }
+            return object;
+        });
+    }
+    create(object, user) {
         const _super = Object.create(null, {
             create: { get: () => super.create }
         });
         return __awaiter(this, void 0, void 0, function* () {
-            if (el.$tel)
+            if (object.$tel)
                 try {
-                    if (yield this.findByTel(el.$tel))
-                        return Promise.reject(yin_core_1.yinStatus.FORBIDDEN("手机号为 " + el.$tel + " 的用户已存在"));
+                    if (yield this.findByTel(object.$tel))
+                        return Promise.reject(yin_core_1.yinStatus.FORBIDDEN("手机号为 " + object.$tel + " 的用户已存在"));
                 }
                 catch (e) {
-                    if (el.$password)
-                        el.$passwordHash = yield bcrypt.hash(String(el.$password), 10);
-                    delete el.$password;
-                    // el.type = el.type || this.users.type;
-                    return _super.create.call(this, el, user);
+                    return this.userParse(yield _super.create.call(this, yield this.saveParse(object, user), user));
                 }
             return Promise.reject(yin_core_1.yinStatus.FORBIDDEN('创建用户时必须包含手机号 $tel'));
+        });
+    }
+    save(o, option, user) {
+        const _super = Object.create(null, {
+            save: { get: () => super.save }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            return _super.save.call(this, yield this.saveParse(o, user), option, user);
         });
     }
     userParse(user) {
@@ -105,15 +126,6 @@ class UserControllerServer extends controller_server_1.ControllerServer {
     }
     findByTel(tel) {
         return this.findOne({ tel });
-    }
-    saveParse(object, user) {
-        return __awaiter(this, void 0, void 0, function* () {
-            delete object.$M;
-            if (user) {
-                object.$owner = user.$id;
-            }
-            return object;
-        });
     }
 }
 exports.UserControllerServer = UserControllerServer;

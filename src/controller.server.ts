@@ -108,7 +108,6 @@ export class ControllerServer {
     async find(filter: object = {}, sort: object = {}, limit: number = 50, skip: number = 0) {
         this.matchReg(filter);
         filter = this.otm(filter)
-        console.log(filter)
         const total = await this.api.count(filter), listFinder = this.api.find(filter).sort(sort).skip(skip);
         if (limit > 0) {
             listFinder.limit(limit);
@@ -165,26 +164,28 @@ export class ControllerServer {
             }
 
             const pel = await this.yin.get(place, user)
-            if (pel.$manageable(user)) {
+            if (await pel.$manageable(user)) {
                 let key = pel.$schema[place.key]
                 if (!key) {
                     pel.$objectSchema.push(new Key(place.key, type))
                     key = pel.$schema[place.key]
-                    // console.log(key)
                 }
                 if (key.type === 'Array') {
                     pel.$children[key.name] = pel.$children[key.name] || []
                     pel.$children[key.name].push(oPlace)
                 } else
                     pel.$children[key.name] = oPlace
-                await pel.$save(user)
+                try {
+                    await pel.$save(user)
+                } catch (e) {
+
+                }
             }
         }
     }
 
-    async save(o, option?, user?) {
+    async save(o, option, user?) {
         o = this.otm(o)
-        console.log(o)
         const m = await this.api.findOne({_id: o._id});
         Object.assign(m, o);
         await this.saveParse(o, user)

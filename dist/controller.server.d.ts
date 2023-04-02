@@ -17,7 +17,7 @@ export declare class ControllerServer {
     create(object: any, user: any): Promise<any>;
     saveParse(object: any, user: any): Promise<any>;
     pushParents(oPlace: any, list: any, user: any): Promise<void>;
-    save(o: any, option?: any, user?: any): Promise<any>;
+    save(o: any, option: any, user?: any): Promise<any>;
     deleteOne(filter: any): any;
     delete(id: any): any;
     objectUpdate(id: any, data?: {

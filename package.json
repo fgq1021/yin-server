@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsc -w | npm link"
+    "dev": "tsc -w",
+    "link": "npm link",
+    "link core": "npm link yin-core"
   },
   "repository": {
     "type": "git",

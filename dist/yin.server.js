@@ -22,7 +22,7 @@ const mongoose_1 = require("mongoose");
 class YinServer extends yin_core_1.Yin {
     constructor(config) {
         super([yin_core_1.ModelModule, model_controller_server_1.ModelControllerServer], [yin_core_1.UserModule, user_controller_server_1.UserControllerServer], [yin_core_1.SystemModule, system_controller_server_1.SystemControllerServer], [yin_core_1.ElementModule, element_controller_server_1.ElementControllerServer]);
-        // @ts-ignore
+        // 给me添加$name是为了在初始化时修改system后保存时$save(user)可以识别为user而不是option
         this.me = { $isRoot: true };
         this.rootPath = '/';
         this.configPath = '/yin.config.json';
@@ -30,13 +30,13 @@ class YinServer extends yin_core_1.Yin {
             $id: '',
             $children: {},
             secret: '',
-            mongo: 'mongodb://127.0.0.1:27017/引'
+            db: 'mongodb://127.0.0.1:27017/引'
         };
         this.margeConfig(config);
     }
     margeConfig(config) {
         yin_core_1.yinConsole.log('读取配置');
-        if (typeof config === 'object') {
+        if (config instanceof Object) {
             yin_core_1.yinConsole.log('读取传入的配置对象', config);
             Object.assign(this.system, config);
         }
@@ -55,12 +55,14 @@ class YinServer extends yin_core_1.Yin {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 yield this.connectMongo();
+                // 在初始化之前把模型文件写入硬盘
+                yield this.writeSystemModelToRoot();
                 yield this.initSys();
                 yield this.runEventFn('start', 'YinOS启动成功');
                 yin_core_1.yinConsole.log('启动成功于', this.system.$id);
             }
             catch (e) {
-                console.log(e);
+                yin_core_1.yinConsole.warn('启动失败', e);
             }
         });
     }
@@ -68,8 +70,8 @@ class YinServer extends yin_core_1.Yin {
         return __awaiter(this, void 0, void 0, function* () {
             yin_core_1.yinConsole.log("数据库连接开始");
             if (url)
-                this.system.mongo = url;
-            const mongoUri = this.system.mongo;
+                this.system.db = url;
+            const mongoUri = this.system.db;
             try {
                 yin_core_1.yinConsole.log(`数据库: ${mongoUri} 连接中`);
                 yield (0, mongoose_1.connect)(mongoUri);
@@ -100,8 +102,16 @@ class YinServer extends yin_core_1.Yin {
                 yin_core_1.yinConsole.warn("未找到配置 #", this.system.$id || '空', '系统初始化开始');
                 this.system = yield this.initialization();
             }
-            for (let i in this.system.$children) {
-                this[i] = yield this.system[i];
+            for (let i in this.system.$schema) {
+                const k = this.system.$schema[i];
+                this[k.name] = this.system[k.name];
+            }
+            try {
+                // @ts-ignore
+                this.me = yield this.system.root();
+            }
+            catch (e) {
+                yin_core_1.yinConsole.warn("初始化", "根用户尚未注册，请尽快完成初始化");
             }
         });
     }
@@ -115,24 +125,17 @@ class YinServer extends yin_core_1.Yin {
             }
             yin_core_1.yinConsole.log("初始化", "数据库检测...");
             yield this.systemRepair();
-            this.me = yield this.User.create({
-                $title: 'root user',
-                $tel: new Date().getTime(),
-                $password: 123123123
+            const { systemDefaultModel } = require('./system.default.model');
+            yield this.Model.api.api.insertMany(systemDefaultModel);
+            const systemModel = {};
+            systemDefaultModel.forEach(m => {
+                systemModel[m.title] = m._id;
             });
-            const userM = yield this.Model.create({
-                $title: '123123'
-            }, this.me);
-            console.log(this.me, 1);
-            this.me.$model = userM.$id;
-            console.log(this.me, 2);
-            yield this.me.$save(this.me);
-            console.log(this.me, 3);
-            console.log(this.me.$model);
             this.system = yield this.System.create({
                 $title: '系统配置',
+                $model: systemModel["系统配置"],
                 secret: this.genSecret(32),
-                mongo: 'mongodb://127.0.0.1:27017/引'
+                db: 'mongodb://127.0.0.1:27017/引'
             }, this.me);
             yield this.writeSystemConfig();
             return this.system;
@@ -181,6 +184,17 @@ class YinServer extends yin_core_1.Yin {
             }
             yield (0, promises_1.writeFile)(this.configPath, JSON.stringify(info.config));
             return true;
+        });
+    }
+    writeSystemModelToRoot() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const models = yield this.Model.api.api.find({});
+            const file = 'export const systemDefaultModel = ' + JSON.stringify(models.map(model => {
+                const m = (0, yin_core_1.parseJson)(model);
+                delete m.owner;
+                return m;
+            }));
+            yield (0, promises_1.writeFile)((0, path_1.join)(this.rootPath, 'system.default.model.ts'), file);
         });
     }
     // startHttpServer(httpServer?) {

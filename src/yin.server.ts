@@ -1,4 +1,4 @@
-import {Yin, UserModule, SystemModule, ModelModule, ElementModule, yinConsole, YinObject} from "yin-core";
+import {Yin, UserModule, SystemModule, ModelModule, ElementModule, yinConsole, YinObject, parseJson} from "yin-core";
 import {UserControllerServer} from "./user.controller.server";
 import {SystemControllerServer} from "./system.controller.server";
 import {ModelControllerServer} from "./model.controller.server";
@@ -8,19 +8,29 @@ import {writeFile} from 'node:fs/promises'
 import {join} from "path";
 import {connect, disconnect} from "mongoose";
 
+interface systemConfig extends YinObject {
+    secret: string,
+    db: string,
+    root: () => Promise<YinObject>
+}
+
+interface rootUser extends YinObject {
+    $isRoot: true,
+    systemConfig: YinObject
+}
 
 export class YinServer extends Yin {
-    // @ts-ignore
-    public me: YinObject = {$isRoot: true}
+    // 给me添加$name是为了在初始化时修改system后保存时$save(user)可以识别为user而不是option
+    public me: rootUser = {$isRoot: true} as any
     public socket
     public rootPath = '/'
     public configPath = '/yin.config.json'
-    public system = {
+    public system: systemConfig = {
         $id: '',
         $children: {},
         secret: '',
-        mongo: 'mongodb://127.0.0.1:27017/引'
-    }
+        db: 'mongodb://127.0.0.1:27017/引'
+    } as any
 
 
     constructor(config?: string | object) {
@@ -35,7 +45,7 @@ export class YinServer extends Yin {
 
     margeConfig(config?: string | object) {
         yinConsole.log('读取配置')
-        if (typeof config === 'object') {
+        if (config instanceof Object) {
             yinConsole.log('读取传入的配置对象', config)
             Object.assign(this.system, config)
         } else {
@@ -54,19 +64,21 @@ export class YinServer extends Yin {
     async start() {
         try {
             await this.connectMongo()
+            // 在初始化之前把模型文件写入硬盘
+            await this.writeSystemModelToRoot()
             await this.initSys()
             await this.runEventFn('start', 'YinOS启动成功')
             yinConsole.log('启动成功于', this.system.$id)
         } catch (e) {
-            console.log(e)
+            yinConsole.warn('启动失败', e)
         }
     }
 
     async connectMongo(url?: string) {
         yinConsole.log("数据库连接开始");
         if (url)
-            this.system.mongo = url
-        const mongoUri = this.system.mongo
+            this.system.db = url
+        const mongoUri = this.system.db
         try {
             yinConsole.log(`数据库: ${mongoUri} 连接中`);
             await connect(mongoUri)
@@ -94,8 +106,15 @@ export class YinServer extends Yin {
             yinConsole.warn("未找到配置 #", this.system.$id || '空', '系统初始化开始');
             this.system = await this.initialization()
         }
-        for (let i in this.system.$children) {
-            this[i] = await this.system[i]
+        for (let i in this.system.$schema) {
+            const k = this.system.$schema[i]
+            this[k.name] = this.system[k.name]
+        }
+        try {
+            // @ts-ignore
+            this.me = await this.system.root()
+        } catch (e) {
+            yinConsole.warn("初始化", "根用户尚未注册，请尽快完成初始化");
         }
     }
 
@@ -111,27 +130,21 @@ export class YinServer extends Yin {
         yinConsole.log("初始化", "数据库检测...");
         await this.systemRepair();
 
-        this.me = await this.User.create({
-            $title: 'root user',
-            $tel: new Date().getTime(),
-            $password: 123123123
+        const {systemDefaultModel} = require('./system.default.model')
+        await this.Model.api.api.insertMany(systemDefaultModel)
+
+        const systemModel = {}
+        systemDefaultModel.forEach(m => {
+            systemModel[m.title] = m._id
         })
 
-        const userM = await this.Model.create({
-            $title: '123123'
-        }, this.me)
-
-        console.log(this.me, 1)
-        this.me.$model = userM.$id
-        console.log(this.me, 2)
-        await this.me.$save(this.me)
-        console.log(this.me, 3)
-        console.log(this.me.$model)
         this.system = await this.System.create({
             $title: '系统配置',
+            $model: systemModel["系统配置"],
             secret: this.genSecret(32),
-            mongo: 'mongodb://127.0.0.1:27017/引'
+            db: 'mongodb://127.0.0.1:27017/引'
         }, this.me)
+
         await this.writeSystemConfig()
         return this.system
     }
@@ -174,6 +187,16 @@ export class YinServer extends Yin {
         }
         await writeFile(this.configPath, JSON.stringify(info.config));
         return true
+    }
+
+    async writeSystemModelToRoot() {
+        const models = await this.Model.api.api.find({})
+        const file = 'export const systemDefaultModel = ' + JSON.stringify(models.map(model => {
+            const m = parseJson(model)
+            delete m.owner
+            return m
+        }))
+        await writeFile(join(this.rootPath, 'system.default.model.ts'), file);
     }
 
 

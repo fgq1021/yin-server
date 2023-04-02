@@ -45,18 +45,34 @@ export class UserControllerServer extends ControllerServer {
         return this.userParse(user)
     }
 
-    async create(el, user?): Promise<any> {
-        if (el.$tel)
+    async saveParse(object, user?) {
+        if (object.$password) {
+            object.$passwordHash = await bcrypt.hash(String(object.$password), 10);
+            object.$passwordUpdateTime = new Date()
+            delete object.$password
+        } else {
+            delete object.$passwordHash
+            delete object.$passwordUpdateTime
+        }
+        if (user) {
+            object.$owner = user.$id
+        }
+        return object
+    }
+
+    async create(object, user?): Promise<any> {
+        if (object.$tel)
             try {
-                if (await this.findByTel(el.$tel))
-                    return Promise.reject(yinStatus.FORBIDDEN("手机号为 " + el.$tel + " 的用户已存在"));
+                if (await this.findByTel(object.$tel))
+                    return Promise.reject(yinStatus.FORBIDDEN("手机号为 " + object.$tel + " 的用户已存在"));
             } catch (e) {
-                if (el.$password) el.$passwordHash = await bcrypt.hash(String(el.$password), 10);
-                delete el.$password
-                // el.type = el.type || this.users.type;
-                return super.create(el, user)
+                return this.userParse(await super.create(await this.saveParse(object, user), user))
             }
         return Promise.reject(yinStatus.FORBIDDEN('创建用户时必须包含手机号 $tel'))
+    }
+
+    async save(o, option, user?) {
+        return super.save(await this.saveParse(o, user), option, user)
     }
 
     userParse(user) {
@@ -85,11 +101,5 @@ export class UserControllerServer extends ControllerServer {
         return this.findOne({tel});
     }
 
-    async saveParse(object, user) {
-        delete object.$M
-        if (user) {
-            object.$owner = user.$id
-        }
-        return object
-    }
+
 }
