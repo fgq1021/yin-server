@@ -1,4 +1,3 @@
-import { ResList } from "yin-core";
 export declare class ControllerServer {
     name: any;
     api: any;
@@ -13,7 +12,7 @@ export declare class ControllerServer {
     get(id: string): Promise<object>;
     findOne(filter: object): Promise<object>;
     matchReg(array: any): any;
-    find(filter?: object, sort?: object, limit?: number, skip?: number): Promise<ResList>;
+    find(filter?: object, sort?: object, limit?: number, skip?: number): Promise<any>;
     create(object: any, user: any): Promise<any>;
     saveParse(object: any, user: any): Promise<any>;
     pushParents(oPlace: any, list: any, user: any): Promise<void>;
