@@ -81,10 +81,7 @@ exports.systemDefaultModel = [
             "system": "Model.6425545002ebc504ec896a8b",
             "systemConfig": "Model.642593428621b1edbd665860"
         },
-        "data": {
-            "systemConfig": "Model.642593428621b1edbd665860",
-            "models": "Model.64255194330fca6bae002f7d"
-        },
+        "data": {},
         "model": null
     },
     {
@@ -320,14 +317,7 @@ exports.systemDefaultModel = [
             "cloud": "Model.642565702dced3761fb695ce",
             "systemModels": "Model.64255194330fca6bae002f7d"
         },
-        "data": {
-            "root": "Model.642551bf330fca6bae002f8b",
-            "network": "Model.64255d2e375d586f431da9d3",
-            "safety": "Model.64255f1b375d586f431da9e9",
-            "fileSystem": "Model.64255f59375d586f431daa03",
-            "cloud": "Model.642565702dced3761fb695ce",
-            "db": "mongodb://127.0.0.1:27017/引"
-        },
+        "data": {},
         "model": null
     },
     {

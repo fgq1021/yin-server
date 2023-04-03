@@ -65,16 +65,8 @@ export declare const systemDefaultModel: ({
         systemModels?: undefined;
     };
     data: {
-        systemConfig: string;
-        models: string;
         port?: undefined;
         cert?: undefined;
-        root?: undefined;
-        network?: undefined;
-        safety?: undefined;
-        fileSystem?: undefined;
-        cloud?: undefined;
-        db?: undefined;
     };
     model: any;
 } | {
@@ -95,14 +87,6 @@ export declare const systemDefaultModel: ({
     data: {
         port: number;
         cert: string;
-        systemConfig?: undefined;
-        models?: undefined;
-        root?: undefined;
-        network?: undefined;
-        safety?: undefined;
-        fileSystem?: undefined;
-        cloud?: undefined;
-        db?: undefined;
     };
     model: any;
     children?: undefined;
@@ -213,14 +197,6 @@ export declare const systemDefaultModel: ({
         SMS?: undefined;
     };
     data: {
-        root: string;
-        network: string;
-        safety: string;
-        fileSystem: string;
-        cloud: string;
-        db: string;
-        systemConfig?: undefined;
-        models?: undefined;
         port?: undefined;
         cert?: undefined;
     };
