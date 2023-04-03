@@ -108,7 +108,8 @@ class YinServer extends yin_core_1.Yin {
             }
             try {
                 // @ts-ignore
-                this.me = yield this.system.root();
+                this.me = yield this.system.root(this.me);
+                this.me.$isRoot = true;
             }
             catch (e) {
                 yin_core_1.yinConsole.warn("初始化", "根用户尚未注册，请尽快完成初始化");
@@ -134,6 +135,9 @@ class YinServer extends yin_core_1.Yin {
             this.system = yield this.System.create({
                 $title: '系统配置',
                 $model: systemModel["系统配置"],
+                $children: {
+                    systemModels: 'Model.64255194330fca6bae002f7d'
+                },
                 secret: this.genSecret(32),
                 db: 'mongodb://127.0.0.1:27017/引'
             }, this.me);

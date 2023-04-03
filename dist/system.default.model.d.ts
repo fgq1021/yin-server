@@ -62,6 +62,7 @@ export declare const systemDefaultModel: ({
         safety?: undefined;
         fileSystem?: undefined;
         cloud?: undefined;
+        systemModels?: undefined;
     };
     data: {
         systemConfig: string;
@@ -134,6 +135,7 @@ export declare const systemDefaultModel: ({
         safety?: undefined;
         fileSystem?: undefined;
         cloud?: undefined;
+        systemModels?: undefined;
     };
     model: any;
     data?: undefined;
@@ -166,6 +168,7 @@ export declare const systemDefaultModel: ({
         safety?: undefined;
         fileSystem?: undefined;
         cloud?: undefined;
+        systemModels?: undefined;
     };
     model: any;
     data?: undefined;
@@ -199,6 +202,7 @@ export declare const systemDefaultModel: ({
         safety: string;
         fileSystem: string;
         cloud: string;
+        systemModels: string;
         elements?: undefined;
         users?: undefined;
         models?: undefined;

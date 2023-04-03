@@ -29,7 +29,7 @@ export const systemDefaultModel = [
             {
                 "title": "元素",
                 "name": "elements",
-                "keyType": "Object",
+                "keyType": "Element",
                 "note": "",
                 "settings": {}
             },
@@ -54,7 +54,7 @@ export const systemDefaultModel = [
             {
                 "title": "系统配置",
                 "name": "systemConfig",
-                "keyType": "Object",
+                "keyType": "System",
                 "note": "",
                 "settings": {
                     "module": "System"
@@ -294,6 +294,15 @@ export const systemDefaultModel = [
                 "name": "cloud",
                 "keyType": "Object",
                 "note": ""
+            },
+            {
+                "title": "系统模型库",
+                "name": "systemModels",
+                "keyType": "Model",
+                "note": "",
+                "settings": {
+                    "module": "Model"
+                }
             }
         ],
         "hide": false,
@@ -305,7 +314,8 @@ export const systemDefaultModel = [
             "network": "Model.64255d2e375d586f431da9d3",
             "safety": "Model.64255f1b375d586f431da9e9",
             "fileSystem": "Model.64255f59375d586f431daa03",
-            "cloud": "Model.642565702dced3761fb695ce"
+            "cloud": "Model.642565702dced3761fb695ce",
+            "systemModels": "Model.64255194330fca6bae002f7d"
         },
         "data": {
             "root": "Model.642551bf330fca6bae002f8b",

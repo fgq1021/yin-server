@@ -79,6 +79,19 @@ class UserControllerServer extends controller_server_1.ControllerServer {
             return object;
         });
     }
+    createRoot(object) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.yin.me.$id) {
+                this.yin.me = yield this.yin.system.root.create(object, this.yin.me);
+                this.yin.me.$isRoot = true;
+                this.yin.me.systemConfig = this.yin.system;
+                yield this.yin.me.$save(this.yin.me);
+                return this.yin.me;
+            }
+            else
+                return Promise.reject(yin_core_1.yinStatus.FORBIDDEN('根用户已经存在，再访问此接口将封IP'));
+        });
+    }
     create(object, user) {
         const _super = Object.create(null, {
             create: { get: () => super.create }

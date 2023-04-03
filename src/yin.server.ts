@@ -112,7 +112,8 @@ export class YinServer extends Yin {
         }
         try {
             // @ts-ignore
-            this.me = await this.system.root()
+            this.me = await this.system.root(this.me)
+            this.me.$isRoot = true
         } catch (e) {
             yinConsole.warn("初始化", "根用户尚未注册，请尽快完成初始化");
         }
@@ -141,6 +142,9 @@ export class YinServer extends Yin {
         this.system = await this.System.create({
             $title: '系统配置',
             $model: systemModel["系统配置"],
+            $children: {
+                systemModels: 'Model.64255194330fca6bae002f7d'
+            },
             secret: this.genSecret(32),
             db: 'mongodb://127.0.0.1:27017/引'
         }, this.me)
