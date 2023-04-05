@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ControllerServer = void 0;
 const mongoose_1 = require("mongoose");
-const yin_core_1 = require("yin-core");
+const core_1 = require("./core");
 const lodash_1 = require("lodash");
 class ControllerServer {
     constructor(yin, module) {
@@ -36,7 +36,7 @@ class ControllerServer {
             const o = {};
             for (let k in model) {
                 let name = k;
-                if (yin_core_1.schemaDashKey.indexOf(k) !== -1) {
+                if (core_1.schemaDashKey.indexOf(k) !== -1) {
                     name = k.replace(/^_/, '$');
                 }
                 else
@@ -59,7 +59,7 @@ class ControllerServer {
                     $ = object.$;
                 else if (k !== '$$') {
                     const _k = k.replace(/^\$/, '');
-                    if (yin_core_1.schemaDashKey.indexOf('_' + _k) !== -1)
+                    if (core_1.schemaDashKey.indexOf('_' + _k) !== -1)
                         m['_' + _k] = object[k];
                     else
                         m[_k] = object[k];
@@ -72,7 +72,7 @@ class ControllerServer {
             }
         }
         for (let k in $) {
-            if (yin_core_1.schemaDashKey.indexOf('_' + k) !== -1)
+            if (core_1.schemaDashKey.indexOf('_' + k) !== -1)
                 m['_' + k] = $[k];
             else
                 m[k] = $[k];
@@ -87,9 +87,9 @@ class ControllerServer {
                     return this.mto(model);
             }
             catch (e) {
-                return Promise.reject(yin_core_1.yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name));
+                return Promise.reject(core_1.yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name));
             }
-            return Promise.reject(yin_core_1.yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name));
+            return Promise.reject(core_1.yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name));
         });
     }
     findOne(filter) {
@@ -98,7 +98,7 @@ class ControllerServer {
             if (model)
                 return this.mto(model);
             else
-                return Promise.reject(yin_core_1.yinStatus.NOT_FOUND("未找到" + this.name, filter));
+                return Promise.reject(core_1.yinStatus.NOT_FOUND("未找到" + this.name, filter));
         });
     }
     matchReg(array) {
@@ -123,15 +123,15 @@ class ControllerServer {
             }
             const list = yield listFinder;
             if (list)
-                return new yin_core_1.ResList(this.mto(list), { skip: Number(skip) + list.length, total, filter: filter, sort });
+                return new core_1.ResList(this.mto(list), { skip: Number(skip) + list.length, total, filter: filter, sort });
             else
-                return Promise.reject(yin_core_1.yinStatus.NOT_FOUND("获取" + this.name + "列表失败", filter));
+                return Promise.reject(core_1.yinStatus.NOT_FOUND("获取" + this.name + "列表失败", filter));
         });
     }
     children(place, limit = 50, skip = 0) {
         return __awaiter(this, void 0, void 0, function* () {
-            const p = new yin_core_1.Place(place), parent = yield this.module.get(p.id), arrayData = {};
-            Object.assign(arrayData, yin_core_1.ArrayDataDefault, parent.$data[p.key] || {});
+            const p = new core_1.Place(place), parent = yield this.module.get(p.id), arrayData = {};
+            Object.assign(arrayData, core_1.ArrayDataDefault, parent.$data[p.key] || {});
             const finder = arrayData.finder ? arrayData.finder : { $parents: p.idKey }, sort = arrayData.index[p.index];
             return this.find(finder, sort, limit, skip);
         });
@@ -148,7 +148,7 @@ class ControllerServer {
             for (let idString of Model.parents) {
                 this.module.childrenUpdate(this.name + '.' + idString, String(Model._id), 'push');
             }
-            yield this.pushParents(new yin_core_1.Place(this.name, Model._id), parents, user);
+            yield this.pushParents(new core_1.Place(this.name, Model._id), parents, user);
             return this.mto(Model);
         });
     }
@@ -158,7 +158,7 @@ class ControllerServer {
                 object.owner = user.$id;
                 return object;
             }
-            return Promise.reject(yin_core_1.yinStatus.UNAUTHORIZED('匿名用户无法创建' + this.name, object));
+            return Promise.reject(core_1.yinStatus.UNAUTHORIZED('匿名用户无法创建' + this.name, object));
         });
     }
     // async parentsCheck(object, user) {
@@ -178,18 +178,18 @@ class ControllerServer {
                 // console.log(list.length, list[i] instanceof Array)
                 let place, type = 'Object';
                 if (list[i] instanceof Array) {
-                    place = new yin_core_1.Place(list[i][0]);
+                    place = new core_1.Place(list[i][0]);
                     type = 'Array';
                 }
                 else {
-                    place = new yin_core_1.Place(list[i]);
+                    place = new core_1.Place(list[i]);
                     type = 'Object';
                 }
                 const pel = yield this.yin.get(place, user);
                 if (yield pel.$manageable(user)) {
                     let key = pel.$schema[place.key];
                     if (!key) {
-                        pel.$objectSchema.push(new yin_core_1.Key(place.key, type));
+                        pel.$objectSchema.push(new core_1.Key(place.key, type));
                         key = pel.$schema[place.key];
                     }
                     if (key.type === 'Array') {

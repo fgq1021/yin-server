@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserControllerServer = void 0;
 const controller_server_1 = require("./controller.server");
-const yin_core_1 = require("yin-core");
+const core_1 = require("./core");
 const bcrypt = require("bcrypt");
 class UserControllerServer extends controller_server_1.ControllerServer {
     constructor() {
@@ -89,7 +89,7 @@ class UserControllerServer extends controller_server_1.ControllerServer {
                 return this.yin.me;
             }
             else
-                return Promise.reject(yin_core_1.yinStatus.FORBIDDEN('根用户已经存在，再访问此接口将封IP'));
+                return Promise.reject(core_1.yinStatus.FORBIDDEN('根用户已经存在，再访问此接口将封IP'));
         });
     }
     create(object, user) {
@@ -100,12 +100,12 @@ class UserControllerServer extends controller_server_1.ControllerServer {
             if (object.$tel)
                 try {
                     if (yield this.findByTel(object.$tel))
-                        return Promise.reject(yin_core_1.yinStatus.FORBIDDEN("手机号为 " + object.$tel + " 的用户已存在"));
+                        return Promise.reject(core_1.yinStatus.FORBIDDEN("手机号为 " + object.$tel + " 的用户已存在"));
                 }
                 catch (e) {
                     return this.userParse(yield _super.create.call(this, yield this.saveParse(object, user), user));
                 }
-            return Promise.reject(yin_core_1.yinStatus.FORBIDDEN('创建用户时必须包含手机号 $tel'));
+            return Promise.reject(core_1.yinStatus.FORBIDDEN('创建用户时必须包含手机号 $tel'));
         });
     }
     save(o, option, user) {
@@ -134,7 +134,7 @@ class UserControllerServer extends controller_server_1.ControllerServer {
             if (user && (yield bcrypt.compare(String(password), user.$passwordHash))) {
                 return this.userParse(user);
             }
-            return Promise.reject(yin_core_1.yinStatus.UNAUTHORIZED('账户或密码错误'));
+            return Promise.reject(core_1.yinStatus.UNAUTHORIZED('账户或密码错误'));
         });
     }
     findByTel(tel) {

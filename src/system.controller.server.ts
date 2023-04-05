@@ -1,5 +1,5 @@
 import {ControllerServer} from "./controller.server";
-import {yinStatus} from "yin-core";
+import {yinStatus} from "./core";
 
 export class SystemControllerServer extends ControllerServer {
     public name = 'System'

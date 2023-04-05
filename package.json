@@ -1,6 +1,6 @@
 {
   "name": "yin-core-server",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +27,7 @@
     "bcrypt": "^5.1.0",
     "lodash": "^4.17.21",
     "mongoose": "^7.0.3",
-    "yin-core": "^0.0.6"
+    "vue": "^3.2.47"
   },
   "files": [
     "dist"

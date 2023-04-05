@@ -1,5 +1,5 @@
 import {ControllerServer} from "./controller.server";
-import {yinStatus} from "yin-core";
+import {yinStatus} from "./core";
 import * as bcrypt from 'bcrypt'
 
 export class UserControllerServer extends ControllerServer {

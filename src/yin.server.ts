@@ -1,4 +1,4 @@
-import {Yin, UserModule, SystemModule, ModelModule, ElementModule, yinConsole, YinObject, parseJson} from "yin-core";
+import {Yin, UserModule, SystemModule, ModelModule, ElementModule, yinConsole, YinObject, parseJson} from "./core";
 import {UserControllerServer} from "./user.controller.server";
 import {SystemControllerServer} from "./system.controller.server";
 import {ModelControllerServer} from "./model.controller.server";

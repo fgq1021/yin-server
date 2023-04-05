@@ -1,4 +1,4 @@
-import { Yin, YinObject } from "yin-core";
+import { Yin, YinObject } from "./core";
 interface systemConfig extends YinObject {
     secret: string;
     db: string;

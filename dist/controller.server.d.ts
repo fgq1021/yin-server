@@ -1,4 +1,4 @@
-import { ResList } from "yin-core";
+import { ResList } from "./core";
 export declare class ControllerServer {
     name: any;
     api: any;

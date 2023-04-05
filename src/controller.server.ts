@@ -1,5 +1,5 @@
 import {Schema, model} from "mongoose";
-import {yinStatus, Place, ResList, Key, schemaDashKey, ArrayDataDefault, yinConsole} from "yin-core";
+import {yinStatus, Place, ResList, Key, schemaDashKey, ArrayDataDefault, yinConsole} from "./core";
 import {difference} from 'lodash'
 
 export class ControllerServer {
