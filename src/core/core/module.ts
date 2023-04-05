@@ -162,7 +162,6 @@ export class Module {
     // 创建时此选项会添加父元素的children
     // el.pushParents = ['id.key',['id,key']]
     async create(object, user?) {
-        console.log(object, user)
         user = this.u(user)
         return this.assign(await this.api.create(object, user))
     }
