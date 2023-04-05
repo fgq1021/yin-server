@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ControllerServer = void 0;
 const mongoose_1 = require("mongoose");
 const yin_core_1 = require("yin-core");
+const lodash_1 = require("lodash");
 class ControllerServer {
     constructor(yin, module) {
         this.updateTimer = {};
@@ -115,6 +116,7 @@ class ControllerServer {
         return __awaiter(this, void 0, void 0, function* () {
             this.matchReg(filter);
             filter = this.otm(filter);
+            sort = this.otm(sort);
             const total = yield this.api.count(filter), listFinder = this.api.find(filter).sort(sort).skip(skip);
             if (limit > 0) {
                 listFinder.limit(limit);
@@ -126,6 +128,14 @@ class ControllerServer {
                 return Promise.reject(yin_core_1.yinStatus.NOT_FOUND("获取" + this.name + "列表失败", filter));
         });
     }
+    children(place, limit = 50, skip = 0) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const p = new yin_core_1.Place(place), parent = yield this.module.get(p.id), arrayData = {};
+            Object.assign(arrayData, yin_core_1.ArrayDataDefault, parent.$data[p.key] || {});
+            const finder = arrayData.finder ? arrayData.finder : { $parents: p.idKey }, sort = arrayData.index[p.index];
+            return this.find(finder, sort, limit, skip);
+        });
+    }
     create(object, user) {
         return __awaiter(this, void 0, void 0, function* () {
             object = this.otm(object);
@@ -135,6 +145,9 @@ class ControllerServer {
             // await this.parentsCheck(object, user)
             const Model = new this.api(object);
             yield Model.save();
+            for (let idString of Model.parents) {
+                this.module.childrenUpdate(this.name + '.' + idString, String(Model._id), 'push');
+            }
             yield this.pushParents(new yin_core_1.Place(this.name, Model._id), parents, user);
             return this.mto(Model);
         });
@@ -210,82 +223,40 @@ class ControllerServer {
     delete(id) {
         return this.api.deleteOne({ _id: id });
     }
-    // async children(place) {
-    //     const p = new Place(place),
-    //         parent = await this.module.get(p.id),
-    //         {filter, sort} = parent.$.data[p.key] || {filter: {}, sort: {}},
-    //         idList = parent.$children[p.key] || [],
-    //         listOption = {skip: 0, total: 0, fixed: 0}, notFoundList = [], fixedList = []
-    //     filter.parent = p.idKey
-    //     for (let i in idList) {
-    //         try {
-    //             const el = await this.yin.get(idList[i], this.yin.me)
-    //             fixedList.push(el.$);
-    //         } catch (e) {
-    //             if (e.status === "NOT_FOUND")
-    //                 notFoundList.push(i);
-    //         }
-    //     }
-    //     notFoundList.reverse();
-    //     for (let index of notFoundList) {
-    //         parent.$children[p.key].splice(index, 1);
-    //     }
-    //     if (notFoundList.length)
-    //         parent.save(this.yin.me);
-    //
-    //     listOption.fixed = fixedList.length;
-    //
-    //     const subList = await this.find(filter, sort)
-    //     listOption.total = subList.total + fixedList.length
-    //     listOption.skip = subList.skip + fixedList.length
-    //     return new ResList(fixedList.concat(subList.list), listOption)
-    // }
-    // eventSync(el, _el?) {
-    //     if (_el) {
-    //         this.objectUpdate(this.name + "." + el.$id);
-    //         console.time("findDifferent");
-    //         const parents = el.parents || [], _parents = _el.parents || [], children = el.children || {},
-    //             _children = _el.children || {};
-    //
-    //         const parentAdd = difference(parents, _parents), parentDelete = difference(_parents, parents),
-    //             parentsDifference = parentAdd.concat(parentDelete), childrenDifference = {};
-    //         for (let i in children) {
-    //             if (_children[i]) {
-    //                 // const d = _.difference(children[i], _children[i]).concat(_.difference(_children[i], children[i]));
-    //                 // if (d.length)
-    //                 //   childrenDifference[i] = d;
-    //                 if (JSON.stringify(children[i]) !== JSON.stringify(_children[i]))
-    //                     childrenDifference[i] = true;
-    //             } else {
-    //                 childrenDifference[i] = true;
-    //             }
-    //         }
-    //         // console.log(childrenDifference);
-    //         for (let i in _children) {
-    //             if (!children[i])
-    //                 childrenDifference[i] = true;
-    //         }
-    //         console.timeEnd("findDifferent");
-    //         // console.log(childrenDifference, parentsDifference, el, _el);
-    //         // for (let idString of parentsDifference) {
-    //         //   // 元素触发结构更新时不判断头尾，可能为降低效率
-    //         //   // this.childrenRefresh(idString, el.$id);
-    //         //   this.childrenRefresh(idString);
-    //         // }
-    //         for (let idString of parentAdd) {
-    //             this.childrenRefresh(idString, el.$id);
-    //         }
-    //         for (let idString of parentDelete) {
-    //             this.childrenRefresh(idString, null, el.$id);
-    //         }
-    //         for (let parentString in childrenDifference) {
-    //             this.objectUpdate(this.name + "." + el.$id + "." + parentString, {
-    //                 type: "fixedChange",
-    //                 changeId: el.$id
-    //             });
-    //         }
-    //     }
-    // }
+    watch(id) {
+    }
+    eventSync(el, _el) {
+        if (_el) {
+            this.objectUpdate(el.$place);
+            const parents = el.$parents || [], _parents = _el.$parents || [], children = el.$children || {}, _children = _el.$children || {}, parentAdd = (0, lodash_1.difference)(parents, _parents), parentDelete = (0, lodash_1.difference)(_parents, parents), childrenDifference = {};
+            for (let i in children) {
+                if (_children[i]) {
+                    // const cAdd = difference(children[i], _children[i]),cDel=difference(_children[i], children[i]);
+                    // 循环一下触发childrenDeleted和pushed事件
+                    if (JSON.stringify(children[i]) !== JSON.stringify(_children[i]))
+                        childrenDifference[i] = true;
+                }
+                else {
+                    childrenDifference[i] = true;
+                }
+            }
+            for (let i in _children) {
+                if (!children[i]) {
+                    // 循环一下触发childrenDeleted事件
+                    childrenDifference[i] = true;
+                }
+            }
+            for (let idString of parentAdd) {
+                this.module.childrenUpdate(this.name + '.' + idString, el.$id, 'push');
+            }
+            for (let idString of parentDelete) {
+                this.module.childrenUpdate(this.name + '.' + idString, el.$id, 'delete');
+            }
+            for (let key in childrenDifference) {
+                this.module.childrenUpdate(el.$place + "." + key, el.$id, 'refresh');
+            }
+        }
+    }
     objectUpdate(id, data, timer) {
         const res = { id };
         if (data)
@@ -295,14 +266,26 @@ class ControllerServer {
                 clearTimeout(this.updateTimer[id]);
             }
             this.updateTimer[id] = setTimeout(() => {
-                console.log("推送更新：", timer + "ms(延迟)", id);
-                this.yin.socket.to(id).emit("update", res);
+                // yinConsole.log("推送更新：", timer + "ms(延迟)", id);
+                this.yin.socket.to(String(id)).emit("update", res);
                 delete this.updateTimer[id];
             }, timer);
         }
         else if (this.yin.socket) {
-            console.log("推送更新：", id);
-            this.yin.socket.to(id).emit("update", res);
+            // yinConsole.log("推送更新：", res);
+            this.yin.socket.to(String(id)).emit("update", res);
+        }
+    }
+    objectDelete(id) {
+        if (this.yin.socket) {
+            // yinConsole.log("推送删除：", id);
+            this.yin.socket.to(String(id)).emit("delete", { id });
+        }
+    }
+    afterDelete(el) {
+        this.objectDelete(el.$place);
+        for (let i in el.$parents) {
+            this.module.childrenUpdate(this.name + '.' + el.$parents[i], el.$id, 'delete');
         }
     }
 }
