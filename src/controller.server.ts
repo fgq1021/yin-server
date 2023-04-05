@@ -1,5 +1,5 @@
 import {Schema, model} from "mongoose";
-import {yinStatus, Place, ResList, Key, schemaDashKey, ArrayDataDefault, yinConsole} from "./core";
+import {yinStatus, Place, ResList, Key, schemaDashKey, ArrayDataDefault} from "./core";
 import {difference} from 'lodash'
 
 export class ControllerServer {
@@ -260,6 +260,7 @@ export class ControllerServer {
     }
 
     objectUpdate(id, data?: { changeId?: any; type: string }, timer?) {
+        id = String(id)
         const res = {id};
         if (data)
             Object.assign(res, data);
@@ -273,8 +274,8 @@ export class ControllerServer {
                 delete this.updateTimer[id];
             }, timer);
         } else if (this.yin.socket) {
-            // yinConsole.log("推送更新：", res);
-            this.yin.socket.to(String(id)).emit("update", res);
+            console.log("推送更新：", res);
+            this.yin.socket.to(id).emit("update", res);
         }
     }
 

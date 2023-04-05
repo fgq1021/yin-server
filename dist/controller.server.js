@@ -258,6 +258,7 @@ class ControllerServer {
         }
     }
     objectUpdate(id, data, timer) {
+        id = String(id);
         const res = { id };
         if (data)
             Object.assign(res, data);
@@ -272,8 +273,8 @@ class ControllerServer {
             }, timer);
         }
         else if (this.yin.socket) {
-            // yinConsole.log("推送更新：", res);
-            this.yin.socket.to(String(id)).emit("update", res);
+            console.log("推送更新：", res);
+            this.yin.socket.to(id).emit("update", res);
         }
     }
     objectDelete(id) {

@@ -17,13 +17,7 @@ export declare class Yin {
     genSecret(passwordLength?: number): string;
     get(place: any, user?: any): Promise<any>;
     private eventFn;
-    on(event: any, fn: any): {
-        event: any;
-        t: number;
-    };
-    removeEvent({ event, t }: {
-        event: any;
-        t: any;
-    }): void;
+    on(event: any, fn: any): this;
+    removeEvent(event: any): this;
     runEventFn(event: any, msg: any): Promise<boolean>;
 }

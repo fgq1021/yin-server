@@ -73,21 +73,35 @@ export class Yin {
 
     on(event, fn) {
         if (!this.eventFn[event])
-            this.eventFn[event] = {};
-        const t = new Date().getTime()
-        this.eventFn[event][t] = fn
-        return {event, t}
+            this.eventFn[event] = [];
+        this.eventFn[event].push(fn)
+        return this
     }
 
-    removeEvent({event, t}) {
-        delete this.eventFn[event][t]
+    removeEvent(event) {
+        const i = this.eventFn[event].indexOf(event)
+        this.eventFn[event].splice(i, 1)
+        return this
     }
+
+
+    // on(event, fn) {
+    //     if (!this.eventFn[event])
+    //         this.eventFn[event] = {};
+    //     const t = new Date().getTime()
+    //     this.eventFn[event][t] = fn
+    //     return {event, t}
+    // }
+    //
+    // removeEvent({event, t}) {
+    //     delete this.eventFn[event][t]
+    // }
 
     async runEventFn(event, msg) {
         const list = this.eventFn[event];
         if (list)
-            for (let id in list) {
-                await list[id](msg)
+            for (let i in list) {
+                await list[i](msg)
             }
         return true;
     }

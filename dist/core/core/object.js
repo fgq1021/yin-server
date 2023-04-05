@@ -51,6 +51,7 @@ class YinObject {
             schema: []
         };
         this.$changed = false;
+        this.$eventFn = {};
         if (module)
             Object.defineProperty(this, '$api', {
                 value: module,
@@ -328,6 +329,30 @@ class YinObject {
     $delete(user) {
         return __awaiter(this, void 0, void 0, function* () {
             return this.$api.delete(this, user);
+        });
+    }
+    $on(event, fn) {
+        if (!this.$eventFn[event])
+            this.$eventFn[event] = [];
+        this.$eventFn[event].push(fn);
+        return this;
+    }
+    $removeEvent(event, fn) {
+        const i = this.$eventFn[event].indexOf(fn);
+        console.log(event, i);
+        this.$eventFn[event].splice(i, 1);
+        return this;
+    }
+    $runEventFn(event, msg) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log(event, msg);
+            const list = this.$eventFn[event];
+            if (list)
+                for (let i in list) {
+                    console.log(list[i]);
+                    yield list[i](msg);
+                }
+            return true;
         });
     }
     // 生命周期默认函数

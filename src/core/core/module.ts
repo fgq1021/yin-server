@@ -48,6 +48,7 @@ export class Module {
                     await this.list[id].$init();
                 } else
                     this.list[id].$assign(el)
+                await this.list[id].$runEventFn('update', '更新')
                 this.api.eventSync(this.list[id], oldEl);
             }
             // else {

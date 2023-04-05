@@ -334,6 +334,34 @@ export class YinObject {
         return this.$api.delete(this, user)
     }
 
+    public $eventFn = {};
+
+    $on(event, fn) {
+        if (!this.$eventFn[event])
+            this.$eventFn[event] = [];
+        this.$eventFn[event].push(fn)
+        return this
+    }
+
+    $removeEvent(event, fn) {
+        const i = this.$eventFn[event].indexOf(fn)
+        console.log(event, i)
+        this.$eventFn[event].splice(i, 1)
+        return this
+    }
+
+    async $runEventFn(event, msg) {
+        console.log(event, msg)
+        const list = this.$eventFn[event];
+        if (list)
+            for (let i in list) {
+                console.log(list[i])
+                await list[i](msg)
+            }
+        return true;
+    }
+
+
     // 生命周期默认函数
     'mounted'(user?) {
     }

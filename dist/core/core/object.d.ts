@@ -41,6 +41,10 @@ export declare class YinObject {
     $createChild(req: any, key: string | object, user?: any): Promise<any>;
     $save(option?: any, user?: any): Promise<any>;
     $delete(user?: any): Promise<any>;
+    $eventFn: {};
+    $on(event: any, fn: any): this;
+    $removeEvent(event: any, fn: any): this;
+    $runEventFn(event: any, msg: any): Promise<boolean>;
     'mounted'(user?: any): void;
     'beforeDestroy'(user?: any): void;
     'created'(user?: any): void;

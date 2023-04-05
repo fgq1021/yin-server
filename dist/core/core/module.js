@@ -55,6 +55,7 @@ class Module {
                     }
                     else
                         this.list[id].$assign(el);
+                    yield this.list[id].$runEventFn('update', '更新');
                     this.api.eventSync(this.list[id], oldEl);
                 }
                 // else {
@@ -182,7 +183,6 @@ class Module {
     // el.pushParents = ['id.key',['id,key']]
     create(object, user) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log(object, user);
             user = this.u(user);
             return this.assign(yield this.api.create(object, user));
         });
