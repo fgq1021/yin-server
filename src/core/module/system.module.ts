@@ -11,7 +11,7 @@ export class SystemModule extends Module {
             public $name = 'System'
 
             get $api() {
-                return _this
+                return _this.yin.vue.markRaw(_this)
             }
 
             async $readable(user): Promise<boolean> {

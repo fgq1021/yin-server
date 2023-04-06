@@ -55,7 +55,12 @@ class Module {
                     }
                     else
                         this.list[id].$assign(el);
-                    yield this.list[id].$runEventFn('update', '更新');
+                    try {
+                        yield this.list[id].$runEventFn('update', '更新');
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
                     this.api.eventSync(this.list[id], oldEl);
                 }
                 // else {
@@ -65,7 +70,7 @@ class Module {
             }
             else {
                 yin_console_1.yinConsole.log("获取" + this.name + ":", el.$title, "#" + el.$id);
-                this.list[id] = this.yin.vue.reactive(new this.Object(el));
+                this.list[id] = new this.Object(el);
                 yield this.list[id].$init();
                 this.api.eventSync(this.list[id]);
             }
@@ -169,14 +174,19 @@ class Module {
     }
     childrenUpdate(place, id, type) {
         return __awaiter(this, void 0, void 0, function* () {
-            const children = this.childrenList[place];
-            if (children)
-                switch (type) {
-                    case 'push':
-                        return children.childrenPushed(id);
-                    default:
-                        return children.childrenRefresh(id, type);
-                }
+            try {
+                const children = this.childrenList[place];
+                if (children)
+                    switch (type) {
+                        case 'push':
+                            return children.childrenPushed(id);
+                        default:
+                            return children.childrenRefresh(id, type);
+                    }
+            }
+            catch (e) {
+                console.log(e);
+            }
         });
     }
     // 创建时此选项会添加父元素的children
@@ -243,6 +253,7 @@ class Module {
         const el = this.list[id];
         if (el) {
             el.$isDeleted = true;
+            el.$runEventFn('delete', '已删除');
             this.api.afterDelete(el);
         }
     }

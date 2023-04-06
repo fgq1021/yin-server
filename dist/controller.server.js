@@ -14,8 +14,8 @@ const mongoose_1 = require("mongoose");
 const core_1 = require("./core");
 const lodash_1 = require("lodash");
 class ControllerServer {
+    // private updateTimer = {};
     constructor(yin, module) {
-        this.updateTimer = {};
         this.yin = yin;
         this.module = module;
     }
@@ -148,7 +148,12 @@ class ControllerServer {
             for (let idString of Model.parents) {
                 this.module.childrenUpdate(this.name + '.' + idString, String(Model._id), 'push');
             }
-            yield this.pushParents(new core_1.Place(this.name, Model._id), parents, user);
+            try {
+                yield this.pushParents(new core_1.Place(this.name, Model._id), parents, user);
+            }
+            catch (e) {
+                console.log(e);
+            }
             return this.mto(Model);
         });
     }
@@ -189,7 +194,7 @@ class ControllerServer {
                 if (yield pel.$manageable(user)) {
                     let key = pel.$schema[place.key];
                     if (!key) {
-                        pel.$objectSchema.push(new core_1.Key(place.key, type));
+                        pel.$.schema.push(new core_1.Key(place.key, type));
                         key = pel.$schema[place.key];
                     }
                     if (key.type === 'Array') {
@@ -198,12 +203,9 @@ class ControllerServer {
                     }
                     else
                         pel.$children[key.name] = oPlace;
-                    try {
-                        yield pel.$save(user);
-                    }
-                    catch (e) {
-                    }
+                    return pel.$save(user);
                 }
+                // 没有权限怎么处理？撤回？？？？
             }
         });
     }
@@ -223,7 +225,7 @@ class ControllerServer {
     delete(id) {
         return this.api.deleteOne({ _id: id });
     }
-    watch(id) {
+    watch() {
     }
     eventSync(el, _el) {
         if (_el) {
@@ -257,30 +259,23 @@ class ControllerServer {
             }
         }
     }
-    objectUpdate(id, data, timer) {
-        id = String(id);
-        const res = { id };
-        if (data)
-            Object.assign(res, data);
-        if (timer) {
-            if (this.updateTimer[id]) {
-                clearTimeout(this.updateTimer[id]);
-            }
-            this.updateTimer[id] = setTimeout(() => {
-                // yinConsole.log("推送更新：", timer + "ms(延迟)", id);
-                this.yin.socket.to(String(id)).emit("update", res);
-                delete this.updateTimer[id];
-            }, timer);
-        }
-        else if (this.yin.socket) {
+    objectUpdate(id, data) {
+        if (this.yin.socket) {
+            id = String(id);
+            let res = { id };
+            if (data)
+                Object.assign(res, data);
             console.log("推送更新：", res);
             this.yin.socket.to(id).emit("update", res);
+            return;
         }
     }
     objectDelete(id) {
         if (this.yin.socket) {
-            // yinConsole.log("推送删除：", id);
-            this.yin.socket.to(String(id)).emit("delete", { id });
+            id = String(id);
+            let res = { id };
+            console.log("推送删除：", res);
+            return this.yin.socket.to(id).emit("delete", res);
         }
     }
     afterDelete(el) {

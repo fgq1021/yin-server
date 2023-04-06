@@ -73,6 +73,7 @@ class YinObject {
         this.$assign(object);
     }
     $assign(object) {
+        delete object.$eventFn;
         Object.assign(this, object);
     }
     $init() {
@@ -247,13 +248,12 @@ class YinObject {
                 configurable: true
             });
         };
-        for (let c in this.$children) {
-            if (typeof this.$children[c] === 'string') {
-                st.push(new key_1.Key(c, 'Object'));
-            }
-            else
-                st.push(new key_1.Key(c, 'Array'));
-        }
+        // for (let c in this.$children) {
+        //     if (typeof this.$children[c] === 'string') {
+        //         st.push(new Key(c, 'Object'))
+        //     } else
+        //         st.push(new Key(c, 'Array'))
+        // }
         putSchema(this.$$.schema);
         putSchema(this.$.schema);
         st.forEach(key => {
@@ -306,7 +306,7 @@ class YinObject {
                 try {
                     const parentModel = yield this.$model();
                     if (parentModel.$id !== this.$id) {
-                        const models = yield parentModel[k.name](), model = models.$id ? models : models[0].$id;
+                        const models = yield parentModel[k.name](), model = models.$id ? models : models[0];
                         if (model.$id) {
                             req.$model = model.$id;
                             for (let i in model.$data) {
@@ -338,18 +338,17 @@ class YinObject {
         return this;
     }
     $removeEvent(event, fn) {
-        const i = this.$eventFn[event].indexOf(fn);
-        console.log(event, i);
-        this.$eventFn[event].splice(i, 1);
+        if (this.$eventFn[event]) {
+            const i = this.$eventFn[event].indexOf(fn);
+            this.$eventFn[event].splice(i, 1);
+        }
         return this;
     }
     $runEventFn(event, msg) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log(event, msg);
             const list = this.$eventFn[event];
             if (list)
                 for (let i in list) {
-                    console.log(list[i]);
                     yield list[i](msg);
                 }
             return true;

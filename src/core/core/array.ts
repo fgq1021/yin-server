@@ -168,7 +168,7 @@ export class YinChildren {
     }
 
     get logMark() {
-        let keyName = ''
+        let keyName
         switch (this.place.key) {
             case '$manage':
                 keyName = '可管理'
@@ -198,7 +198,7 @@ export class YinChildren {
             if (this.userList[user.$id])
                 return this.userList[user.$id]
             else
-                this.userList[user.$id] = new this.yin.vue.reactive(new YinArray({}, this, user))
+                this.userList[user.$id] = new YinArray({}, this, user)
             return this.userList[user.$id]
         }
     }

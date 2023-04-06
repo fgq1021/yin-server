@@ -23,7 +23,7 @@ class SystemModule extends module_1.Module {
                 this.$name = 'System';
             }
             get $api() {
-                return _this;
+                return _this.yin.vue.markRaw(_this);
             }
             $readable(user) {
                 return __awaiter(this, void 0, void 0, function* () {

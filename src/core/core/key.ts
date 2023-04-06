@@ -5,7 +5,7 @@ export class Key {
     public note = ""
     public settings = {}
 
-    constructor(key: string | object, type = 'String', title = '键值', note?, settings?) {
+    constructor(key: string | object, type = 'String', title = '键', note?, settings?) {
         Object.defineProperty(this, 'isKey', {value: true, enumerable: false, configurable: false})
 
         if (typeof key === "object") {

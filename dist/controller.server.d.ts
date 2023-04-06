@@ -4,7 +4,6 @@ export declare class ControllerServer {
     api: any;
     module: any;
     yin: any;
-    private updateTimer;
     constructor(yin: any, module: any);
     init(): void;
     makeModel(): void;
@@ -17,16 +16,16 @@ export declare class ControllerServer {
     children(place: any, limit?: number, skip?: number): Promise<ResList>;
     create(object: any, user: any): Promise<any>;
     saveParse(object: any, user: any): Promise<any>;
-    pushParents(oPlace: any, list: any, user: any): Promise<void>;
+    pushParents(oPlace: any, list: any, user: any): Promise<any>;
     save(o: any, option: any, user?: any): Promise<any>;
     deleteOne(filter: any): any;
     delete(id: any): any;
-    watch(id: any): void;
+    watch(): void;
     eventSync(el: any, _el?: any): void;
     objectUpdate(id: any, data?: {
         changeId?: any;
         type: string;
-    }, timer?: any): void;
-    objectDelete(id: any): void;
+    }): void;
+    objectDelete(id: any): any;
     afterDelete(el: any): void;
 }

@@ -17,7 +17,7 @@ export class ModelModule extends Module {
             public $name = 'Model'
 
             get $api() {
-                return _this
+                return _this.yin.vue.markRaw(_this)
             }
 
             get $model() {

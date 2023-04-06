@@ -11,7 +11,7 @@ export class ElementModule extends Module {
             public $name = 'Element'
 
             get $api() {
-                return _this
+                return _this.yin.vue.markRaw(_this)
             }
         }
         this.init()

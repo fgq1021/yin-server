@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Types = exports.Type = exports.Key = void 0;
 class Key {
-    constructor(key, type = 'String', title = '键值', note, settings) {
+    constructor(key, type = 'String', title = '键', note, settings) {
         this.title = "";
         this.name = "";
         this.keyType = "String";

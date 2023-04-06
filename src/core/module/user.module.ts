@@ -1,7 +1,6 @@
 import {Module} from "../core/module";
 import {YinObject} from "../core/object";
 import {ModuleSchema} from "../core/module.schema";
-import {yinStatus} from "../lib/yin.status";
 
 export class UserModule extends Module {
     public name = 'User'
@@ -34,7 +33,7 @@ export class UserModule extends Module {
             public $name = 'User'
 
             get $api() {
-                return _this
+                return _this.yin.vue.markRaw(_this)
             }
 
             get $owner() {

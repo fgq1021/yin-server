@@ -14,7 +14,7 @@ class ElementModule extends module_1.Module {
                 this.$name = 'Element';
             }
             get $api() {
-                return _this;
+                return _this.yin.vue.markRaw(_this);
             }
         };
         this.init();
