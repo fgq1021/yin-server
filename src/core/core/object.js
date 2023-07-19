@@ -2,7 +2,7 @@ import {yinStatus} from "../lib/yin.status.js";
 import {Key} from "./key.js";
 import {Place} from "./place.js";
 import {hideProperty} from "../lib/yin.defineProperty.js";
-import {yinAssign} from "../lib/yin.assign.js";
+import {yinAssign, yinParse} from "../lib/yin.assign.js";
 import {Types} from "./type.js";
 
 export class Schema extends Array {
@@ -169,7 +169,7 @@ export class yinObject {
     _module
     //TODO 保留这个临时集合，还是把所有临时数据都放在第一层来Proxy？，然后用hideKeys来隐藏
     _ = {
-        model: {},
+        model: undefined,
         eventFn: {},
         keyWaiter: {}
     }
@@ -296,11 +296,13 @@ export class yinObject {
         _model(value, object) {
             object._model = value
             if (value) {
-                object._.model = object._module?.yin.Model?.list[value]
-                object._.model._schema.__change(key => {
-                    object._mapKey(key)
-                })
-                object._mapSchema()
+                object._.model = object._module?.yin.Model.getFromCache(value)
+                if (object._.model) {
+                    object._.model._schema.__change(key => {
+                        object._mapKey(key)
+                    })
+                    object._mapSchema()
+                }
             }
             return true
         },
@@ -326,20 +328,17 @@ export class yinObject {
             //     object._module.mapChange(this, old)
             return true
         },
-        // /**
-        //  * 需要在parents变更中处理更新函数
-        //  * @param value
-        //  * @param object
-        //  * @return {boolean}
-        //  * @private
-        //  */
-        // _parents: (value, object) => {
-        //     const old = object._parents
-        //     object._parents = Parents.create(value)
-        //     if (old.length)
-        //         object._module.parentsChange(this, old)
-        //     return true
-        // }
+        /**
+         * 需要在parents变更中处理更新函数
+         * @param value
+         * @param object
+         * @return {boolean}
+         * @private
+         */
+        _parents: (value, object) => {
+            object._parents = new Parents(...value)
+            return true
+        }
     }
 
     _setter = {}
@@ -373,7 +372,7 @@ export class yinObject {
         this._setter = {}
         this._getter = {}
         const scripts = this._module.yin.scripts,
-            script = scripts[this._place] || scripts[this._.model._place]
+            script = scripts[this._place] || scripts[this._.model?._place]
         Object.assign(this, script)
         for (let key of this._schemaMix) {
             this._mapKey(key)
@@ -389,9 +388,12 @@ export class yinObject {
         // if (key.private)
         //     this._privateKeys.push(key.name)
         if (key.type === 'Array') {
-            this[key.name] ??= new ArrayKey(this, key.name)
+            this[key.name] ??= ArrayKey.create(this, key.name)
             this._setter[key.name] = function (value, object) {
-                object[key.name] = new ArrayKey(this, key.name, value)
+                if (object._initialized === false) {
+                    ArrayKey.findChange(this, key.name, value)
+                }
+                object[key.name] = ArrayKey.create(this, key.name, value)
                 return true
             }
         } else if ((this._module?.yin?.structureType || ['System', 'Object']).indexOf(key.type) !== -1) {
@@ -410,6 +412,9 @@ export class yinObject {
                      */
                     if (value)
                         object._map[key.name] = value instanceof yinObject ? value._place : value
+                    if (value && object._name === 'Model' && object._schema[key.name]) {
+                        object._schema[key.name].settings.manualCreation = true
+                    }
                     return true
                 }
                 this._getter[key.name] = function (object) {
@@ -435,7 +440,7 @@ export class yinObject {
             //     this.privateKeys.push(name)
             if (key.type === 'Array')
                 this.setter[name] = (value, object, proxy) => {
-                    object[name] = new ArrayKey(proxy, name, value)
+                    object[name] = ArrayKey.create(proxy, name, value)
                     return true
                 }
             else if ((this.module?.yin?.structureType || ['System', 'Object']).indexOf(key.type) !== -1) {
@@ -511,10 +516,22 @@ export class yinObject {
 
 
     _refresh() {
-        return this._module.getFromController(this._id);
+        if (this._module.listWaiter[this._id]) return this._module.listWaiter[this._id]
+        this._module.listWaiter[this._id] = this._module.getFromController(this._id)
+        return this._module.getFromController(this._id)
     }
 
-    async _createChild(req = {}, key, user) {
+    async _createChild(object = {}, key, user) {
+        let req = yinParse(object)
+        // 创建副本
+        if (req._id) {
+            delete req._parents
+            delete req._owner
+            delete req._id
+            delete req._map
+            req._title ??= ''
+            req._title += '的副本'
+        }
         const k = typeof key === "string" ? this._schemaMix[key] : key
         let module = req._name
         if (k?.type === 'Object' || k?.type === 'Array')
@@ -523,11 +540,11 @@ export class yinObject {
             module ??= k?.type
         if (k.type !== 'Array') req._pushParents = [this._place.toKey(k.name)]
         else if (module !== this._name) req._pushParents = [[this._place.toKey(k.name)]]
-        else {
+        else if (!req._pushParents?.length) {
             if (!(req._parents instanceof Array)) req._parents = []
             req._parents.push(this._id + '.' + k.name)
         }
-        if (!req._title) req._title = k.title
+        req._title ??= k.title
         if (!req._model && this._name !== 'Model')
             try {
                 const parentModel = await this._model
@@ -535,13 +552,18 @@ export class yinObject {
                     const models = await parentModel[k.name], model = models._id ? models : models[0]
                     if (model._id) {
                         req._model = model._id
-                        // console.log('_createChild', req, model)
-                        for (let {name} of model._schema) req[name] = model[name]
                     }
                 }
             } catch (e) {
                 // console.log(e)
             }
+        if (req._model) {
+            const model = await this._module.yin.Model.get(req._model)
+            for (let {name} of model._schema) {
+                req[name] ??= model[name]
+            }
+        }
+
         // console.log('_createChild', module, req)
         return this._module.yin[module].create(req, user)
     }
@@ -550,43 +572,72 @@ export class yinObject {
         const k = typeof key === "string" ? this._schemaMix[key] : key,
             o = (object instanceof Place || typeof object === 'string') ? await this._module.yin.get(object) : object
         if (k.type === 'Array' && o._name === this._name) {
-            o._parents.push(new Place(this._id, k.name))
+            o._parents.push(this._place.toIdKey(k))
             return o._save(user)
-        } else if (k.type === 'Array') if (this._map[k.name]) this._map[k.name].push(o._place)
-        else this._map[k.name] = [o._place]
-        else if (this._module.yin.structureType.indexOf(k.type) !== -1) this._map[k.name] = o._place
+        } else if (k.type === 'Array') {
+            if (!this._map[k.name] instanceof Array)
+                this._map[k.name] = []
+            this._map[k.name].push(o._place)
+        } else if (this._module.yin.structureType.indexOf(k.type) !== -1)
+            this._map[k.name] = o._place
         return this._save(user)
     }
 
     async _removeChild(object, key, user) {
         const k = typeof key === "string" ? this._schemaMix[key] : key,
             o = (object instanceof Place || typeof object === 'string') ? await this._module.yin.get(object) : object
-        let notMatch = false
-        if (k.type === 'Array' && o._name === this._name) {
-            // console.log(o._parents, this._place.toKey(k.name)["id.key"])
-            const i = o._parents.indexOf(this._place.toKey(k.name)["id.key"])
+        if (k.type === 'Array') {
+            const i = o._parents.indexOf(this._place.toIdKey(k))
             if (i !== -1) {
                 o._parents.splice(i, 1)
                 return o._save(user)
             }
-            notMatch = true
-        } else if (k.type === 'Array') {
+
             /**
              * 列表固定的项目处理
              */
-            // console.log('remove from _map')
-            // console.log(this._map[k.name])
             if (this._map[k.name]) {
-                const i = this._map[k.name].indexOf(o._place)
-                if (i !== -1) this._map[k.name].splice(i, 1)
+                const i = this._map[k.name].findIndex(p => p.valueOf() === o._place.valueOf())
+                if (i !== -1) {
+                    this._map[k.name].splice(i, 1)
+                    return this._save(user)
+                }
             }
-            notMatch = true
-        } else if (this._module.yin.structureType.indexOf(k.type) !== -1)
-            if (this._map[k.name] === o._place) delete this._map[k.name]
-            else notMatch = true
-        return notMatch ? yinStatus.NOT_FOUND(`${this._title}.${k.title}没有${o.title}`) : this._save(user)
+        } else if (this._module.yin.structureType.indexOf(k.type) !== -1) {
+            if (this._map[k.name]?.valueOf() === o._place.valueOf()) delete this._map[k.name]
+            return this._save(user)
+        }
+        return yinStatus.NOT_FOUND(`${this._title}.${k.title}没有${o.title}`)
     }
 
+    async _fixChild(object, key, user) {
+        await this._manageable(user)
+        this._map[key] ??= []
+        this._map[key].push(object)
+        await this._save(user)
+        const parentsIndex = object._parents.indexOf(this._place.toKey(key)['id.key'])
+        if (parentsIndex !== -1) {
+            await object._manageable(user)
+            object._parents.splice(parentsIndex, 1)
+            await object._save(user)
+        }
+        return this
+    }
+
+    async _unfixChild(index, key, user) {
+        await this._manageable(user)
+        this._map[key] ??= []
+        const unFix = this._map[key][index]
+        this._map[key].splice(index, 1)
+        await this._save(user)
+
+        const object = await this._module.yin.get(unFix)
+        await object._manageable(user)
+        object._parents.push(this._place.toKey(key)['id.key'])
+        await object._save(user)
+
+        return this
+    }
 
     async _save(option, user) {
         if (this._saving)
@@ -719,10 +770,19 @@ export function _mapProxy(map = {}) {
 export function _mapArrayProxy(list) {
     const _mapArray = new Proxy([], {
         set(target, p, newValue) {
-            if (newValue instanceof yinObject)
-                target[p] = newValue._place
-            else
-                target[p] = Place.create(newValue)
+            if (Number.isInteger(Number(p))) {
+                let value
+                if (newValue instanceof yinObject)
+                    value = newValue._place
+                else
+                    value = Place.create(newValue)
+                if (target.findIndex(v => v.valueOf() === v) === -1)
+                    target[p] = value
+                else
+                    return false
+            } else {
+                target[p] = newValue
+            }
             return true
         }
     })
@@ -735,23 +795,13 @@ export class Parents extends Array {
         return Array;
     }
 
-    static create(list) {
-        const l = new Proxy([], {
-            set(target, p, newValue) {
-                target[p] = newValue
-                return true
-            }
-        })
-        Object.assign(l, list)
-        return l
-    }
-
-    has(place) {
-        const s = place.valueOf()
-        for (let p of this) {
-            if (s === p.valueOf())
-                return true
+    push(...ids) {
+        const list = []
+        for (let id of ids) {
+            if (this.indexOf(id) === -1)
+                list.push(id)
         }
+        return super.push(...list)
     }
 }
 
@@ -770,6 +820,18 @@ export class ObjectKey {
         this.object = object
         this.key = key
         this.module = module
+    }
+
+    async models() {
+        try {
+            const parentModel = await this.object._model
+            if (parentModel._id !== this.object._id) {
+                const models = await parentModel[this.key]
+                return models._id ? [models] : models
+            }
+        } catch (e) {
+            return []
+        }
     }
 
     createWaiter(user) {
@@ -807,12 +869,11 @@ export class ObjectKey {
         } catch (e) {
             if (e.status === 'NOT_FOUND' && object._name !== 'Model') {
                 const model = object._.model
-                if (model._schema[k]) {
+                if (model && model._schema[k] && !model._schema[k].settings?.manualCreation) {
                     try {
                         const models = await model[k]
                         if (models._id || models.length) {
                             return await this.createWaiter(user)
-                            // return await this.create({}, user)
                         }
                     } catch (e) {
                         if (e.status !== 'NOT_FOUND')
@@ -853,22 +914,153 @@ export class ObjectKey {
 }
 
 export class ArrayKey {
-    finder
-    index = {
-        default: {_id: 1}
-    }
+    finder = null
+    index
     /**
      * 开放创建
      */
     open = false
+    object
+    key
 
     constructor(object, key, value) {
         hideProperty(this, 'object')
         hideProperty(this, 'key')
         if (value)
-            yinAssign(this, value)
+            Object.assign(this, value)
         this.object = object
         this.key = key
+    }
+
+    static create(object, key, value = {}) {
+        value.index ??= {default: {}}
+        value.index.default ??= {}
+        value.index = this.indexesProxy(object, key, value.index)
+        return new Proxy(new ArrayKey(object, key, value), {
+            deleteProperty: (target, p) => {
+                delete target[p]
+                this.pull(object, key)
+                return true
+            },
+            get(target, p, receiver) {
+                if (target[p])
+                    return target[p]
+                else if (target.index[p])
+                    return {
+                        auth(user) {
+                            return object._module.children(new Place(object._place, key, p), user)
+                        },
+                        async then(resolve, reject) {
+                            try {
+                                resolve(await this.auth())
+                            } catch (e) {
+                                reject(e)
+                            }
+                        }
+                    }
+                return target[p]
+            },
+            set: (target, p, value, proxy) => {
+                if (p === 'index')
+                    target.index = this.indexesProxy(object, key, value)
+                else
+                    target[p] = value
+                this.pull(object, key)
+                return true
+            }
+        })
+    }
+
+    static indexesProxy(object, key, value = {default: {_id: 1}}) {
+        for (let i in value) {
+            value[i] = this.indexProxy(object, key, i, value[i])
+        }
+        return new Proxy(value, {
+            deleteProperty: (target, p) => {
+                delete target[p]
+                this.pull(object, key, p)
+                return true
+            },
+            set: (target, p, value, proxy) => {
+                target[p] = this.indexProxy(object, p, key, value)
+                this.pull(object, key, p)
+                return true
+            }
+        })
+    }
+
+    static indexProxy(object, key, i, value) {
+        return new Proxy(value, {
+            deleteProperty: (target, p) => {
+                delete target[p]
+                this.pull(object, key, i)
+                return true
+            },
+            set: (target, p, value, proxy) => {
+                target[p] = value
+                this.pull(object, key, i)
+                return true
+            }
+        })
+    }
+
+
+    static findChange(object, key, value = {}) {
+        const _value = object[key]
+        // console.log(!_value.finder !== !value.finder, JSON.stringify(_value.finder) !== JSON.stringify(value.finder))
+        if (!_value.finder !== !value.finder || JSON.stringify(_value.finder) !== JSON.stringify(value.finder)) {
+            const list = {}
+            for (let i in value.index) {
+                list[i] = true
+                this.refreshChildren(object, key, i)
+            }
+            for (let i in _value.index) {
+                if (!list[i])
+                    this.refreshChildren(object, key, i)
+            }
+            return
+        }
+        this.findIndexChange(object, key, value.index)
+    }
+
+    static findIndexChange(object, key, index = {}) {
+        const refreshList = {}, _index = object[key].index
+        for (let i in _index) {
+            refreshList[i] = !(index[i] && JSON.stringify(_index[i]) === JSON.stringify(index[i]));
+        }
+        for (let i in index) {
+            refreshList[i] ??= true
+        }
+        // console.log(refreshList)
+        for (let i in refreshList) {
+            if (refreshList[i])
+                this.refreshChildren(object, key, i)
+        }
+    }
+
+    static pull(object, key, index) {
+        // console.log('array key pull')
+        object._module.pull(object, key, object[key])
+        if (index)
+            this.refreshChildren(object, key, index)
+    }
+
+    static refreshChildren(object, key, i) {
+        if (!object._module.yin.client)
+            object._module.childrenUpdate(new Place(object._place, key, i), null, 'refresh')
+    }
+
+
+    async models() {
+        try {
+            const parentModel = await this.object._model
+            if (parentModel._id !== this.object._id) {
+                const models = await parentModel[this.key]
+                return models._id ? [models] : models
+            }
+        } catch (e) {
+            return []
+        }
     }
 
 
@@ -882,6 +1074,10 @@ export class ArrayKey {
 
     push(object, user) {
         return this.object._pushChild(object, this.key, user)
+    }
+
+    fix(id, user) {
+        return this.object._fixChild(id, this.key, user)
     }
 
     remove(object, user) {

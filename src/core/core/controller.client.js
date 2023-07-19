@@ -1,4 +1,5 @@
 import {yinRequest} from "../lib/yin.request.js";
+import {Place} from "./place.js";
 
 export class ControllerClient {
     name
@@ -50,7 +51,9 @@ export class ControllerClient {
         return this.req.delete(id);
     }
 
-    children(place, limit = 50, skip = 0) {
+    async children(place, limit = 50, skip = 0) {
+        // const p = Place.create(place), parent = await this.module.get(p.id), fixLength = parent._map[p.key]?.length || 0
+        // console.log(place.valueOf(), limit, skip)
         return this.req.get('children/' + place + "?limit=" + limit + "&skip=" + skip)
     }
 

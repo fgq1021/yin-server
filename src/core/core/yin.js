@@ -4,6 +4,7 @@ import {yinConsole} from "../lib/yin.console.js";
 import {Place} from "./place.js";
 import {hideProperty} from "../lib/yin.defineProperty.js";
 import {Type, Types} from "./type.js";
+import {Key} from "./key.js";
 
 export const yinRoot = 'User.2902ac2f0000000000000000'
 
@@ -49,7 +50,8 @@ export class Yin {
     regModule(module, controller) {
         const Module = new module(this, controller)
         this[Module.name] = Module
-        this.Types[Module.name] = new Type(Module.title, '', 'ObjectId')
+        this.Types[Module.name] = new Type(Module.title, '', 'ObjectId',
+            [new Key('manualCreation', 'Boolean', '手动创建', '此项默认关闭，关闭时系统将自动根据模型创建该对象，\n对于可能造成回环的模型键值，强烈建议打开此项')])
         this.modules.push(this[Module.name])
         this.structureType.push(Module.name)
         return this
@@ -88,7 +90,7 @@ export class Yin {
     async get(place, user) {
         if (place) {
             place = Place.create(place)
-            if (place.module)
+            if (place.module && this[place.module])
                 return this[place.module].get(place.id, user)
             else
                 return yinStatus.NOT_FOUND('错误的place', place)

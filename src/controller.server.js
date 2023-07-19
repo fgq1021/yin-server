@@ -194,6 +194,24 @@ export class ControllerServer {
         }
     }
 
+
+    /**
+     * 对象转化为排序
+     * @param object
+     * @return {{}}
+     */
+    ots(object) {
+        const m = {}
+        for (let k in object) {
+            if (/^_/.test(k)) {
+                m[k] = object[k]
+            } else {
+                m['_data.' + k] = object[k]
+            }
+        }
+        return m
+    }
+
     async get(id) {
         try {
             const model = await this.api.findById(id)
@@ -228,7 +246,7 @@ export class ControllerServer {
         try {
             this.matchReg(filter);
             filter = this.otm(filter)
-            sort = this.otm(sort)
+            sort = this.ots(sort)
             const total = await this.api.count(filter), listFinder = this.api.find(filter).sort(sort).skip(skip);
             if (limit > 0) {
                 listFinder.limit(limit);
@@ -245,10 +263,45 @@ export class ControllerServer {
         }
     }
 
+    /**
+     * 模仿客户端完成包含fixed的查询
+     * 但是此处并不包含fixed的查询
+     * 只是能接受包含fixLength的skip
+     *
+     * @param place
+     * @param limit
+     * @param skip
+     * @return {Promise<ResList|*|undefined>}
+     */
     async children(place, limit = 50, skip = 0) {
-        const p = Place.create(place), parent = await this.module.get(p.id), arrayData = parent[p.key]
-        const finder = arrayData.finder ? arrayData.finder : {_parents: p["id.key"]}, sort = arrayData.index[p.index]
-        return this.find(finder, sort, limit, skip)
+        // console.log(place)
+        const p = Place.create(place),
+            parent = await this.module.get(p.id),
+            fixLength = parent._map[p.key] instanceof Array ? parent._map[p.key]?.length : 0,
+            // if (skip < fixLength) {
+            //     const list = (parent._map[p.key] || []).slice(skip, limit), findList = []
+            //     for (let c of list) {
+            //         const o = this.yin.getFromCache(c)
+            //         if (!o)
+            //             findList.push(c.id)
+            //     }
+            //     console.log(list, findList)
+            //     if (findList.length) {
+            //         const finder = {_id: findList}, list = await this.find(finder, {}, findList.length)
+            //         console.log(list)
+            //         if (findList.length !== list.length) {
+            //             console.log(findList.length, list.length, '!!!')
+            //         }
+            //         return list
+            //     }
+            // }
+            arrayData = parent[p.key],
+            finder = arrayData.finder ? arrayData.finder : {_parents: p["id.key"]},
+            sort = arrayData.index[p.index],
+            res = await this.find(finder, sort, limit, skip - fixLength)
+        res.total += fixLength
+        res.skip += fixLength
+        return res
     }
 
     /**
@@ -265,10 +318,12 @@ export class ControllerServer {
          * 用户ID检查
          * 匿名无法创建，同时修改_owner
          *
-         * TODO 此处并不完善，如果是管理员，不能该修改owner
+         * TODO 此处并不完善，如果是管理员，不能修改owner
          */
 
         user ??= this.yin.me
+        if (user !== this.yin.me && !user._id)
+            return yinStatus.UNAUTHORIZED('匿名用户无权进行创建或修改操作')
         model._owner = user._id
 
         /**
@@ -363,7 +418,7 @@ export class ControllerServer {
         yinAssign(m, object);
         return this.saveParse(m, user, async m => {
             await m.save(option)
-            this.childrenUpdateCheck(m, old)
+            this.childrenUpdateCheck(m.toObject(), old)
             return m
         })
     }
@@ -379,6 +434,11 @@ export class ControllerServer {
     watch() {
     }
 
+    /**
+     * 子结构变化检查
+     * @param el - 新的mongoose模型.toObject()
+     * @param _el - 老的mongoose模型.toObject()
+     */
     childrenUpdateCheck(el, _el) {
         const parents = el._parents || [], _parents = _el._parents || [], map = el._map || {},
             _map = _el._map || {}, parentAdd = _.difference(parents, _parents),
@@ -406,8 +466,9 @@ export class ControllerServer {
         for (let idString of parentDelete) {
             this.module.childrenUpdate(this.name + '.' + idString, el._id.toString(), 'delete')
         }
+        // console.log(childrenDifference)
         for (let key in childrenDifference) {
-            this.module.childrenUpdate(el._place.toKey(key), el._id.toString(), 'refresh')
+            this.module.childrenUpdate(new Place(this.name, el._id, key), _map[key], 'fixChange')
         }
     }
 

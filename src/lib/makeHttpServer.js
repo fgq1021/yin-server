@@ -65,6 +65,7 @@ export function socketController(server, option, yin) {
     })
     io.of('/manage').on('connection', async socket => {
         socket.on('update', async ({place, value, nodeId}) => {
+            // console.log(place, value)
             const p = new Place(place)
             try {
                 const object = yin.getFromCache(p)

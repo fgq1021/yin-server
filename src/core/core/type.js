@@ -97,14 +97,13 @@ export const Types = {
     NumberRange: new Type('数字范围', '最小和最大值', [Number, Number]),
     Boolean: new Type('布尔值', '布尔值只有是否两个状态', Boolean),
     Function: new Type('功能', '直接执行Model文件中的功能', String,
-        [
-            new Key('argument', 'Boolean', '包含参数')
-        ]),
+        [new Key('argument', 'Boolean', '包含参数')]),
     Date: new Type('日期', '', Date),
 
 
     // 对象选择
-    Object: new Type('对象', '可以放置任意类型的对象', String),
+    Object: new Type('对象', '可以放置任意类型的对象', String,
+        [new Key('manualCreation', 'Boolean', '手动创建', '此项默认关闭，关闭时系统将自动根据模型创建该对象，\n对于可能造成回环的模型键值，强烈建议打开此项')]),
     Array: new Type('数组', '本系统中的对象组，只能创建本对象的类型', {}),
     Module: new Type('模块', '选择模块'),
     Place: new Type('系统内地址', 'Module._id.key.meta'),
