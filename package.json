@@ -1,6 +1,6 @@
 {
   "name": "yin-core-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "引 服务端",
   "main": "index.js",
   "type": "module",
@@ -33,6 +33,7 @@
   },
   "files": [
     "src",
+    "public",
     "index.js"
   ]
 }

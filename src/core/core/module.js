@@ -2,6 +2,7 @@ import {yinStatus} from "../lib/yin.status.js";
 import {yinConsole} from "../lib/yin.console.js";
 import {yinObject} from "./object.js";
 import {YinArray, YinChildren} from "./array.js";
+import {Place} from "./place.js";
 
 //TODO 下个版本要让Module也由yinObject拓展而来
 
@@ -68,7 +69,10 @@ export class Module {
         let element = this.list[id];
         if (element && element._id) {
             if (new Date(el._updatedAt) > element._updatedAt) {
-                if (el._model !== element._model.valueOf()) await this.yin.Model.get(el._model)
+                try {
+                    if (el._model !== element._model.valueOf()) await this.yin.Model.get(el._model)
+                } catch (e) {
+                }
                 this.list[id]._initialized = false
                 Object.assign(this.list[id], el)
                 this.list[id]._initialized = true
@@ -78,7 +82,10 @@ export class Module {
                 // this.api.eventSync(this.list[id], oldEl);
             }
         } else {
-            if (el._model) await this.yin.Model.get(el._model)
+            try {
+                if (el._model) await this.yin.Model.get(el._model)
+            } catch (e) {
+            }
             this.list[id] = this.Object.create(el)
             console.log(...yinConsole.load("#" + el._id, this.name, el._title))
             // this.api.eventSync(this.list[id]);
@@ -125,20 +132,24 @@ export class Module {
     async getWaiter(id) {
         if (id) {
             const cache = this.list[id];
-            if (cache) {
+            if (this.listWaiter[id])
+                return this.listWaiter[id]
+            else if (cache) {
                 if (cache._isDeleted) return yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name);
                 return cache;
             } else {
-                if (this.listWaiter[id]) return this.listWaiter[id]
+                // if (this.listWaiter[id]) return this.listWaiter[id]
                 this.listWaiter[id] = this.getFromController(id)
                 return this.listWaiter[id]
             }
         } else return yinStatus.NOT_ACCEPTABLE('没有ID');
     }
 
-    // getFromCache(id) {
-    //     return this.list[id]
-    // }
+    getFromCache(id) {
+        const object = this.list[id]
+        if (object && !object._isDeleted)
+            return object
+    }
 
     async getFromController(id) {
         try {
@@ -159,7 +170,11 @@ export class Module {
     }
 
     async childrenWaiter(place) {
+        // console.log(place)
         if (place) {
+            place = Place.create(place)
+            if (!place.index)
+                place = new Place(place, 'default')
             const cache = this.childrenList[place];
             if (cache) {
                 return cache
@@ -168,8 +183,9 @@ export class Module {
                 try {
                     await this.childrenList[place].init()
                 } catch (e) {
+                    console.log(place, e)
                     delete this.childrenList[place]
-                    return yinStatus.NOT_ACCEPTABLE('没有正确的Place');
+                    return e.status ? Promise.reject(e) : yinStatus.NOT_ACCEPTABLE('没有正确的Place');
                 }
                 return this.childrenList[place]
             }
@@ -178,12 +194,34 @@ export class Module {
 
     async childrenUpdate(place, id, type) {
         try {
-            const children = this.childrenList[place];
-            if (children) switch (type) {
-                case 'push':
-                    return children.childrenPushed(id)
-                default:
-                    return children.childrenRefresh(id, type)
+            // console.log(place)
+            place = Place.create(place)
+            if (place.index) {
+                const children = this.childrenList[place];
+                if (children)
+                    switch (type) {
+                        case 'push':
+                            await children.childrenPushed(id)
+                            break
+                        default:
+                            await children.childrenRefresh(id, type)
+                            break
+                    }
+            } else {
+                const parent = await this.yin.get(place)
+                if (parent[place.key]?.index)
+                    for (let i in parent[place.key].index) {
+                        const children = this.childrenList[place.toIndex(i)];
+                        if (children)
+                            switch (type) {
+                                case 'push':
+                                    await children.childrenPushed(id)
+                                    break
+                                default:
+                                    await children.childrenRefresh(id, type)
+                                    break
+                            }
+                    }
             }
         } catch (e) {
             console.log(e)

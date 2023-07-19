@@ -44,7 +44,7 @@ export class YinArray extends Array {
     }
     user
     api
-    loading = false
+    loading
 
     constructor(option, api, user) {
         super()
@@ -59,15 +59,17 @@ export class YinArray extends Array {
     }
 
     async get(num, skip = this.option.$skip) {
+        if (this.loading) await this.loading
         if (this.api.place) {
-            await this.children(num, skip)
+            this.loading = this.children(num, skip)
         } else {
-            await this.getWaiter(num, skip)
+            this.loading = this.getFromController(num, skip)
         }
+        await this.loading
+        this.loading = undefined
     }
 
     async children(num, skip = this.option.$skip) {
-        this.loading = true
         const res = await this.api.get(num, skip, this.user)
         let l = skip
         this.option.$skip = res.skip
@@ -77,22 +79,20 @@ export class YinArray extends Array {
         for (let i in res.list) {
             this[l + Number(i)] = res.list[i]
         }
-        this.loading = false
     }
 
-    async getWaiter(limit = 50, skip = 0) {
-        if (!this.loading)
-            return this.getFromController(limit, skip);
-        else
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve(this.getWaiter(limit, skip))
-                }, 100)
-            });
-    }
+    // async getWaiter(limit = 50, skip = 0) {
+    //     if (!this.loading)
+    //         return this.getFromController(limit, skip);
+    //     else
+    //         return new Promise((resolve) => {
+    //             setTimeout(() => {
+    //                 resolve(this.getWaiter(limit, skip))
+    //             }, 100)
+    //         });
+    // }
 
     async getFromController(limit = 50, skip = 0) {
-        this.loading = true
         const res = await this.api.api.find(this.option.filter, this.option.sort, limit, skip)
         let cantRead = 0
         this.option.total = res.total
@@ -113,11 +113,20 @@ export class YinArray extends Array {
         if (cantRead && res.skip < res.total) {
             await this.getFromController(Math.min(cantRead, res.total - res.skip), res.skip)
         }
-        this.loading = false
     }
 
+    fix(object) {
+        if (this.api.place)
+            return this.api.fix(object, this.user)
+    }
+
+    unFix(index) {
+        if (this.api.place)
+            return this.api.unFix(index, this.user)
+    }
 
     async refresh(length) {
+        if (this.loading) await this.loading
         this.length = 0
         await this.get(this.option.$skip + length, 0)
     }
@@ -132,17 +141,24 @@ export class YinArray extends Array {
 }
 
 
+/**
+ * 自定义查询的数组无法稳定获得热更新
+ * 手动刷新？自动刷新？还是不再缓存？
+ */
+
 export class YinChildren {
     parent
     children = []
     childrenTotal = 0
     place
-    loading = true
+    loading
     yin
     module
     userList = {}
     readTimes = 0
     lastRead = new Date()
+    __v_skip = true
+
 
     constructor(place, yin, module) {
         this.place = Place.create(place)
@@ -153,8 +169,8 @@ export class YinChildren {
     }
 
     get fixedList() {
-        if (this.parent)
-            return this.parent._map[this.place.key] || []
+        if (this.parent && this.parent._map[this.place.key] instanceof Array)
+            return this.parent._map[this.place.key]
         return []
     }
 
@@ -182,14 +198,19 @@ export class YinChildren {
             default:
                 keyName = this.parent._schemaMix[this.place.key]?.title
         }
-        return ['#' + this.place['id.key'], "[" + this.module.name + "]", this.parent._title + '.' + keyName, this.list.length + '/' + this.total]
+        return ['#' + this.place['id.key.index'], "[" + this.module.name + "]", this.parent._title + '.' + keyName + '.' + this.place.index, this.list.length + '/' + this.total]
+        //  return ['#' + this.place, "[" + this.module.name + "]", this.parent._title + '.' + keyName + '.' + this.place.index, this.list.length + '/' + this.total]
     }
 
     async init() {
-        this.parent = await this.module.get(this.place.id, this.yin.me)
+        this.loading = this.module.get(this.place.id, this.yin.me)
+        this.parent = await this.loading
         this.module.api.watch(this.place)
+        this.loading = this.getFixedList()
+        await this.loading
         this.loading = false
-        await this.getFromController(10, 0)
+        await this.getFromController(10, this.fixed)
+        await this.getFromCache(this.fixed, 0)
         return this
     }
 
@@ -215,35 +236,92 @@ export class YinChildren {
         skip = Number(skip)
         this.readTimes++
         this.lastRead = new Date()
-        const res = await this.getWaiter(limit, skip, user)
+        if (this.loading) await this.loading
+        const res = await this.getFromCache(limit, skip, user)
         return new ResList(res.list, res)
     }
 
-    async getWaiter(limit = 50, skip = 0, user) {
-        if (!this.loading)
-            return this.getFromCache(limit, skip, user);
-        else
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve(this.getWaiter(limit, skip, user))
-                }, 100)
-            });
+    fixDeleteFunctionList = {}
+
+    async getFixedList() {
+        // console.log('getFixedList', this.place, this.parent._title)
+        // console.log(this.parent._map)
+        const unCacheList = {}, deleteList = []
+        for (let f of this.fixedList) {
+            if (!this.yin[f.module].list[f.id]) {
+                unCacheList[f.module] ??= []
+                unCacheList[f.module].push(f.id)
+            }
+        }
+        // console.log(unCacheList)
+        for (let module in unCacheList) {
+            const ids = unCacheList[module], res = await this.yin[module].find({_id: ids}, {}, ids.length, 0)
+            // console.log(ids, res)
+            if (!this.yin.client)
+                if (ids.length !== res.length) {
+                    for (let id of ids) {
+                        if (res.findIndex(o => o._id === id) === -1) {
+                            this.yin[module].list[id] = {_id: id, _isDeleted: true}
+                        }
+                    }
+                }
+        }
+        if (!this.yin.client) {
+            for (let p in this.fixDeleteFunctionList) {
+                try {
+                    const object = await this.yin.get(p)
+                    object._removeEvent('delete', this.fixDeleteFunctionList[p])
+                } catch (e) {
+                }
+            }
+            for (let i in this.fixedList) {
+                try {
+                    const object = await this.yin.get(this.fixedList[i])
+                    this.fixDeleteFunctionList[object._place] = async () => {
+                        if (object._place.valueOf() === this.parent._map[this.place.key][i].valueOf()) {
+                            // console.log('object delete in fixedList', i, object._place.valueOf())
+                            this.parent._map[this.place.key].splice(i, 1);
+                            await this.parent._save(this.yin.me);
+                        } else {
+                            console.log('!!!!!!!!!!!!!!!')
+                            console.log('object delete in fixedList', i, object._place.valueOf(), this.parent._map[this.place.key])
+                        }
+                    }
+                    object._on('delete', this.fixDeleteFunctionList[object._place])
+                } catch (e) {
+                    if (e.status === "NOT_FOUND") {
+                        deleteList.push(i)
+                    }
+                }
+            }
+            deleteList.reverse();
+            for (let index of deleteList) {
+                this.parent._map[this.place.key].splice(index, 1);
+            }
+
+            if (deleteList.length)
+                await this.parent._save(this.yin.me);
+        }
     }
 
     async getFromController(limit = 50, skip = 0) {
-        this.loading = true
+        if (this.loading) await this.loading
+        this.loading = this._getFromController(limit, skip)
+        return this.loading
+    }
+
+    async _getFromController(limit = 50, skip = 0) {
         let res = await this.module.api.children(this.place, limit, skip)
-        this.childrenTotal = res.total
+        this.childrenTotal = res.total - this.fixed
         for (let i in res.list) {
-            await this.module.assign(res.list[i])
-            this.children[Number(i) + skip] = res.list[i]._id;
+            const object = await this.module.assign(res.list[i])
+            this.children[Number(i) + skip - this.fixed] = object._id;
         }
-        if (skip) { // @ts-ignore
-            console.log(...yinConsole.update(...this.logMark, limit, skip));
-        } else { // @ts-ignore
+        if (skip) {
+            console.log(...yinConsole.load(...this.logMark, limit, skip));
+        } else {
             console.log(...yinConsole.load(...this.logMark));
         }
-
         this.loading = false
         return res
     }
@@ -252,7 +330,6 @@ export class YinChildren {
         await this.parent._readable(user)
         limit = Number(limit)
         skip = Number(skip)
-        // console.log('getFromCache', limit, skip)
         const res = [], notFoundFixedList = [], notFoundList = []
         let i = skip, manageable
         try {
@@ -262,24 +339,19 @@ export class YinChildren {
         }
 
         while ((res.length < limit) && (i < this.total)) {
-            // console.log(res.length, limit, i, this.total)
             if (i < this.fixed) {
-                for (let i in this.fixedList) {
-                    try {
-                        res.push(await this.yin.get(this.fixedList[i], user));
-                    } catch (e) {
-                        if (e.status === "NOT_FOUND")
-                            notFoundFixedList.push(i);
-                        else if (manageable)
-                            res.push({_id: this.fixedList[i], hide: true})
-                    }
+                try {
+                    res.push(await this.yin.get(this.fixedList[i], user));
+                } catch (e) {
+                    if (e.status !== "NOT_FOUND" && manageable)
+                        res.push({_id: this.fixedList[i], _hide: true})
                 }
             } else {
-                // const c = i - this.fixed
-                let subId = this.children[i];
+                const c = i - this.fixed
+                let subId = this.children[c];
                 if (!subId) {
                     await this.getFromController(limit + 50, i);
-                    subId = this.children[i];
+                    subId = this.children[c];
                 }
                 try {
                     const el = await this.module.get(subId, user);
@@ -292,16 +364,15 @@ export class YinChildren {
             i++;
         }
 
-        if (!this.yin.client) {
-            notFoundFixedList.reverse();
-            for (let index of notFoundFixedList) {
-                this.parent._map[this.place.key].splice(index, 1);
-            }
-
-            if (notFoundFixedList.length)
-                await this.parent._save(this.yin.me);
-        }
-
+        // if (!this.yin.client) {
+        //     notFoundFixedList.reverse();
+        //     for (let index of notFoundFixedList) {
+        //         this.parent._map[this.place.key].splice(index, 1);
+        //     }
+        //
+        //     if (notFoundFixedList.length)
+        //         await this.parent._save(this.yin.me);
+        // }
 
         notFoundList.reverse()
         for (let index of notFoundList) {
@@ -314,18 +385,18 @@ export class YinChildren {
 
 
     async childrenPushed(id) {
-        const firstList = await this.module.api.children(this.place, 1),
+        const firstList = await this.module.api.children(this.place, 1, this.fixed),
             firstObject = firstList.list[0]
         if (firstObject && firstObject._id === id) {
             return this.childrenRefresh(id, 'pushFirst')
         }
 
         if (this.children.length === this.childrenTotal) {
-            await this.getFromController(1, this.childrenTotal)
+            await this.getFromController(1, this.total)
             if (this.children[this.childrenTotal - 1] === id) {
                 return this.refreshDone(id, 'pushLast', 1)
             }
-            return this.childrenRefresh(id, 'clear')
+            // return this.childrenRefresh(id, 'clear')
         }
         return this.childrenRefresh(id, 'refresh')
     }
@@ -343,42 +414,50 @@ export class YinChildren {
         let length = 0
         switch (type) {
             case 'pushFirst':
-                this.children.splice(1, 0, id)
+                this.children.splice(0, 0, id)
                 this.childrenTotal++
                 length++
                 break
             case 'pushLast':
                 if (this.children.length === this.childrenTotal) {
-                    await this.getFromController(1, this.childrenTotal)
+                    this.children.push(id)
                     length++
                 }
+                this.childrenTotal++
                 break
-            case 'clear':
-                console.log('childrenClear !!!!')
-                this.children = []
-                length++
-                await this.getFromController(10, 0)
-                break
+            // case 'clear':
+            //     console.log('childrenClear !!!!')
+            //     this.children = []
+            //     length++
+            //     await this.getFromController(10, 0)
+            //     break
             case 'refresh':
                 length++
-                await this.getFromController(10, 0)
+                await this.getFromController(this.children.length + 1, this.fixed)
                 break
             case 'delete':
                 const index = this.children.indexOf(id)
-                // console.log(this.children)
-                // console.log(id)
-                // console.log(index)
                 if (index !== -1) {
                     this.children.splice(index, 1)
-                    if (this.children.length === this.childrenTotal) {
-                        length--
-                    }
+                    this.childrenTotal--
+                    // if (this.children.length === this.childrenTotal) {
+                    //     length--
+                    // }
                 }
+                break
+            case 'fixChange':
+                await this.module.get(this.place.id)
+                await this.getFixedList()
+                length = this.fixed - id.length
+                if (length < 0)
+                    length = 0
                 break
             default:
                 console.log('childrenRefresh not match', id, type)
                 break
         }
+        // console.log(this.list)
+        // console.log(length)
         return this.refreshDone(id, type, length)
     }
 
@@ -395,5 +474,13 @@ export class YinChildren {
 
     create(object) {
         return this.parent[this.place.key].create(object)
+    }
+
+    fix(object, user) {
+        return this.parent._fixChild(object, this.place.key, user)
+    }
+
+    unFix(index, user) {
+        return this.parent._unfixChild(index, this.place.key, user)
     }
 }
