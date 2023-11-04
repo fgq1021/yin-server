@@ -1,7 +1,7 @@
 {
   "name": "yin-core-server",
-  "version": "0.2.1",
-  "description": "引 服务端",
+  "version": "0.3.0",
+  "description": "引.服务端",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -19,17 +19,18 @@
   },
   "homepage": "https://github.com/fgq1021/yin-server#readme",
   "dependencies": {
-    "@koa/cors": "^4.0.0",
-    "@koa/router": "^12.0.0",
+    "@fastify/cors": "^8.4.0",
+    "@fastify/multipart": "^8.0.0",
+    "@fastify/static": "^6.11.2",
     "axios": "^1.4.0",
-    "bcrypt": "^5.1.0",
+    "fastify": "^4.24.3",
+    "file-type": "^18.5.0",
     "jsonwebtoken": "^9.0.0",
-    "koa": "^2.14.2",
-    "koa-body": "^6.0.1",
-    "koa-static": "^5.0.0",
     "lodash": "^4.17.21",
+    "mime-types": "^2.1.35",
     "mongoose": "^7.0.3",
-    "socket.io": "^4.6.1"
+    "socket.io": "^4.6.1",
+    "socket.io-client": "^4.7.2"
   },
   "files": [
     "src",

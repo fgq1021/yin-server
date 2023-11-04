@@ -3,8 +3,23 @@ import {yinConsole} from "../lib/yin.console.js";
 import {yinObject} from "./object.js";
 import {YinArray, YinChildren} from "./array.js";
 import {Place} from "./place.js";
+import {Type} from "./type.js";
+import {Key} from "./key.js";
 
 //TODO 下个版本要让Module也由yinObject拓展而来
+
+/**
+ * TODO 分离客户端和服务端的Module[重大改变]
+ * 合并Module和ControllerClient？
+ * 改ControllerServer为本地操作？
+ *
+ * 由于之前版本的操作完全依赖Module
+ * 为了各端操作体验一致，所有功能由同一Module进行分发
+ * 但是现在更进了一步，功能被尽可能添加到Object上
+ * 用户几乎不需要操作Module
+ * 统一Module的意义也就弱化了
+ */
+
 
 export class Module {
     name
@@ -14,28 +29,22 @@ export class Module {
     }
     // Place
     api
+    file
     list = {}
     listWaiter = {}
     childrenList = {}
-    /**
-     * 防止vue创建的proxy代理到module内的项目，
-     * 因为module有时候会挂载node中的基础功能，
-     * 一旦发生reactive扩散，会造成莫名其妙的报错
-     * @type {boolean}
-     * @private
-     */
-    __v_skip = true
 
     constructor(yin, controller) {
         this.yin = yin
         this.api = new controller(yin, this)
     }
 
-    init() {
-        console.log(...yinConsole.load('模块', this.name))
+    async init() {
+        // console.log(...yinConsole.load('#模块', this.name))
         // const _this = this
         this.Object.module = this
         this.Object.mapSchema()
+
 
         // this.Place = class extends ModulePlace {
         //     module = _this
@@ -51,8 +60,53 @@ export class Module {
             this.list = this.yin.reactive({})
             this.childrenList = this.yin.reactive({})
         }
-        this.api.init()
+        await this.api.init()
+
+        // 自动释放
+        // setInterval(() => {
+        //     this.clearCache()
+        // }, this.clearCacheGap)
     }
+
+    clearCacheGap = 1000
+
+    clearCache() {
+        // console.log(...yinConsole.log(`#${this.name}`, '开始内存回收'))
+        const now = Date.now()
+        for (let p in this.list) {
+            if (now - this.list[p]._readAt > this.clearCacheGap) {
+                console.log(...yinConsole.warn(`#${this.list[p]._id}`, `${this.list[p]._titlePlace} 已被释放`))
+                delete this.list[p]
+            }
+        }
+        for (let p in this.childrenList) {
+            if (!this.list[this.childrenList[p].parent._place]) {
+                console.log(...yinConsole.warn(...this.childrenList[p].logMark, `已被释放`))
+                delete this.childrenList[p]
+            }
+        }
+    }
+
+    regStructureType() {
+        this.yin.Types[this.name] = new Type(this.title, '', 'ObjectId',
+            [new Key('manualCreation', 'Boolean', '手动创建', '此项默认关闭，关闭时系统将自动根据模型创建该对象，\n对于可能造成回环的模型键值，强烈建议打开此项')])
+        this.yin.structureType.push(this.name)
+    }
+
+    authProxyList = {}
+
+    authProxy(user) {
+        if (this.authProxyList[user._id]) return this.authProxyList[user._id]
+        this.authProxyList[user._id] = new Proxy(this, {
+            get(target, p) {
+                if (target[p] instanceof Function)
+                    return (...args) => target[p](...args, user)
+                return target[p]
+            }
+        })
+        return this.authProxyList[user._id]
+    }
+
 
     regScripts(place) {
         for (let i in this.list) {
@@ -63,86 +117,84 @@ export class Module {
     }
 
 
-    async assign(el) {
-        // console.log(...yinConsole.update("#>>" + el._id, this.name, el._title))
+    async assign(el, user = this.yin.me) {
+        // console.log(...yinConsole.update("#>>" + el._title, this.name, el))
         const id = el._id;
         let element = this.list[id];
         if (element && element._id) {
             if (new Date(el._updatedAt) > element._updatedAt) {
                 try {
-                    if (el._model !== element._model.valueOf()) await this.yin.Model.get(el._model)
-                } catch (e) {
+                    if (el._model) await this.yin.Model.get(el._model)
                 }
-                this.list[id]._initialized = false
+                catch (e) {
+                }
+                element._hold = true
                 Object.assign(this.list[id], el)
-                this.list[id]._initialized = true
+                element._changed = false
+                element._hold = undefined
                 console.log(...yinConsole.update("#" + el._id, this.name, el._title))
-                this.api.objectUpdate(this.list[id]._place, {at: this.list[id]._updatedAt})
-                this.list[id]._runEventFn('update', '更新')
+                // this.objectUpdate(this.list[id]._place, {at: this.list[id]._updatedAt})
+                // this.list[id]._runEventFn('update')
+                await element.update(user)
                 // this.api.eventSync(this.list[id], oldEl);
             }
-        } else {
+            // return yinStatus.NOT_ACCEPTABLE('没有更新日期的数据')
+        }
+        else {
             try {
                 if (el._model) await this.yin.Model.get(el._model)
-            } catch (e) {
+            }
+            catch (e) {
             }
             this.list[id] = this.Object.create(el)
+            await this.list[id].mounted(user)
             console.log(...yinConsole.load("#" + el._id, this.name, el._title))
             // this.api.eventSync(this.list[id]);
-            this.api.watch(this.list[id]._place);
+            // this.api.watch && this.api.watch(this.list[id]._place);
         }
         return this.list[id];
     }
 
-    async refresh(id, at) {
-        const o = this.list[id]
-        if (o) {
-            if (o._saving) {
-                await o._saveWaiter
-                return this.refresh(id, at)
-            } else if (at) {
-                if (new Date(at) > o._updatedAt) return o._refresh()
-                return
-            }
-            return o._refresh()
-        }
-    }
+    // async refresh(id, at) {
+    //     const o = this.list[id]
+    //     if (o) {
+    //         if (at) {
+    //             await o._nextTick()
+    //             if (new Date(at) > o._updatedAt) return o._refresh()
+    //             return
+    //         }
+    //         return o._refresh()
+    //     }
+    // }
 
     pull(object, key, value, nodeId) {
+        // console.assert(false, object._titlePlace, key, value)
+       // console.log(nodeId, this.yin.nodeId)
         return this.api.pull(object, key, value, nodeId)
     }
 
     async get(id, user = this.yin.me) {
+        id = Place.idSetter(id)
         if (id) {
-            try {
-                const el = await this.getWaiter(id);
-                await el._readable(user)
-                this.api.objectRead(el._place, user)
-                return el;
-            } catch (e) {
-                if (e.message === `未找到id为 #${id} 的${this.name}`) {
-                    this.list[id] ??= {_isDeleted: true}
-                }
-                return Promise.reject(e)
-            }
+            const el = await this.getWaiter(id);
+            await el._readable(user)
+            await el.read(user)
+            return el;
         }
         return yinStatus.NOT_FOUND('#id 为空')
     }
 
-    async getWaiter(id) {
+    async getWaiter(id, user) {
         if (id) {
             const cache = this.list[id];
-            if (this.listWaiter[id])
-                return this.listWaiter[id]
-            else if (cache) {
+            if (cache) {
+                cache._readAt = Date.now()
                 if (cache._isDeleted) return yinStatus.NOT_FOUND("未找到id为 #" + id + " 的" + this.name);
                 return cache;
-            } else {
-                // if (this.listWaiter[id]) return this.listWaiter[id]
-                this.listWaiter[id] = this.getFromController(id)
-                return this.listWaiter[id]
             }
-        } else return yinStatus.NOT_ACCEPTABLE('没有ID');
+            else return this.getFromController(id, user)
+        }
+        else return yinStatus.NOT_ACCEPTABLE('没有ID');
     }
 
     getFromCache(id) {
@@ -151,13 +203,17 @@ export class Module {
             return object
     }
 
-    async getFromController(id) {
+    async getFromController(id, user) {
         try {
-            const el = await this.assign(await this.api.get(id));
+            if (this.listWaiter[id]) return this.listWaiter[id]
+            this.listWaiter[id] = this.assign(await this.api.get(id), user);
+            const object = await this.listWaiter[id]
             delete this.listWaiter[id]
-            return el
-        } catch (err) {
-            if (this.list[id]) this.list[id]._isDeleted = true; else this.list[id] = {_id: id, _isDeleted: true}
+            return object
+        }
+        catch (err) {
+            if (this.list[id]) this.list[id]._isDeleted = true;
+            else this.list[id] = {_id: id, _isDeleted: true}
             return Promise.reject(err);
         }
     }
@@ -170,31 +226,37 @@ export class Module {
     }
 
     async childrenWaiter(place) {
-        // console.log(place)
         if (place) {
             place = Place.create(place)
-            if (!place.index)
-                place = new Place(place, 'default')
+            if (!place.index) place = place.toIndex()
             const cache = this.childrenList[place];
-            if (cache) {
-                return cache
-            } else {
-                this.childrenList[place] = new YinChildren(place, this.yin, this)
-                try {
-                    await this.childrenList[place].init()
-                } catch (e) {
-                    console.log(place, e)
-                    delete this.childrenList[place]
-                    return e.status ? Promise.reject(e) : yinStatus.NOT_ACCEPTABLE('没有正确的Place');
-                }
-                return this.childrenList[place]
+            if (cache) return cache
+            else if (this.listWaiter[place]) return this.listWaiter[place]
+            else {
+                this.listWaiter[place] = this.getChildrenFromController(place)
+                return this.listWaiter[place]
             }
-        } else return yinStatus.NOT_ACCEPTABLE('没有正确的Place');
+            //  return this.childrenList[place]||this.getChildrenFromController(place)
+        }
+        else return yinStatus.NOT_ACCEPTABLE('没有正确的Place');
     }
+
+    async getChildrenFromController(place) {
+        try {
+            // console.log('' + place, this.listWaiter[place] instanceof Promise)
+            this.childrenList[place] = await new YinChildren(place, this.yin, this).init()
+            delete this.listWaiter[place]
+            return this.childrenList[place]
+        }
+        catch (err) {
+            delete this.listWaiter[place]
+            return Promise.reject(err);
+        }
+    }
+
 
     async childrenUpdate(place, id, type) {
         try {
-            // console.log(place)
             place = Place.create(place)
             if (place.index) {
                 const children = this.childrenList[place];
@@ -207,7 +269,11 @@ export class Module {
                             await children.childrenRefresh(id, type)
                             break
                     }
-            } else {
+                else {
+                    // console.log(place)
+                }
+            }
+            else {
                 const parent = await this.yin.get(place)
                 if (parent[place.key]?.index)
                     for (let i in parent[place.key].index) {
@@ -223,141 +289,94 @@ export class Module {
                             }
                     }
             }
-        } catch (e) {
-            console.log(e)
+        }
+        catch (e) {
+            // console.log(e)
         }
     }
 
 // 创建时此选项会添加父元素的children
 // el.pushParents = ['id.key',['id,key']]
     async create(object, user = this.yin.me) {
-        return this.assign(await this.api.create(object, user))
+        const o = await this.assign(await this.api.create(object, user), user)
+        await o.created(user)
+        return o
     }
 
 // 更新时此选项会添加父元素的children????
 // el.pushParents = ['id.key',['id,key']]
-    async save(object, option, user = this.yin.me) {
-        let o = option, u = user
-        if (!user && option && (option._name === 'User' || option._id || option._isRoot)) {
-            u = option
-            o = {}
-        }
-        await object._manageable(u)
-        object.beforeSave(u);
-        await this.assign(await this.api.save(object, o, u));
-        object.saved(u);
-        object._runEventFn('saved', u)
+    async save(object, user = this.yin.me) {
+        await object._manageable(user)
+        await object.beforeSave(user)
+        await this.assign(await this.api.save(object, user), user);
+        await object.saved(user)
         return object;
     }
 
-    async delete(o, user = this.yin.me) {
-        const id = o._id || o;
-        const object = await this.get(id, user)
-        if (!this.yin.client) await object._refresh()
-        if (await object._manageable(user)) {
-            object.beforeDelete();
-            await this.api.delete(id, user);
-            object.deleted()
-            this.afterDelete(id);
-            return yinStatus.OK(this.name + " #" + id + " 已删除")
+    async delete(object, user = this.yin.me) {
+        // if (!this.yin.client) await object._refresh()
+        await object._manageable(user)
+        await object.beforeDelete(user);
+        await this.api.delete(object, user);
+        await object.deleted(user)
+        return yinStatus.OK(this.name + " #" + object._id + " 已删除")
+    }
+
+    deleted(object) {
+        object._isDeleted = true
+        for (let key in object) {
+            if (!/^_/.test(key))
+                delete object.key
         }
-        return yinStatus.UNAUTHORIZED('用户#' + user._title + '没有' + this.name + ' #' + id + ' 的管理权限')
+        console.log(...yinConsole.delete("#" + object._id, this.name, object._title))
     }
 
-    objectUpdate(id, data) {
-        return this.api.objectUpdate(id, data)
-    }
+    async deleteOne(filter, user) {
+        let object
+        try {
+            object = await this.findOne(filter, user)
+            return object._delete(user)
+        }
+        catch (e) {
 
-
-    objectDelete(id) {
-        return this.api.objectDelete(id)
-    }
-
-// async deleteFrom(el, placeString, user) {
-//     const {id, place, key} = this.parsePlaceString(placeString);
-//     const pIndex = el.parents.indexOf(id + "." + place + "." + key);
-//     if (pIndex !== -1) {
-//         el.parents.splice(pIndex, 1);
-//         await el.save(user);
-//     } else {
-//         await this.removeChildren(await this.yin.get(placeString), el.name + "." + el._id + "." + place + "." + key, user);
-//     }
-// }
-
-    afterDelete(id) {
-        const el = this.list[id];
-        if (el) {
-            el._isDeleted = true;
-            el._runEventFn('delete', '已删除')
-            this.api.afterDelete(el)
         }
     }
 
-    mapChange(object, old) {
-        return this.api.mapChange && this.api.mapChange(object, old)
+    findChildren(object) {
+
     }
 
 
-    parentsChange(object, old) {
-        return this.api.parentsChange && this.api.parentsChange(object, old)
-    }
+    // objectUpdate(place, data) {
+    //     return this.api.objectUpdate(place, data)
+    // }
+    //
+    //
+    // objectDelete(id) {
+    //     return this.api.objectDelete(id)
+    // }
+    //
+    // afterDelete(id) {
+    //     const el = this.list[id];
+    //     if (el) {
+    //         el._isDeleted = true;
+    //         this.api.afterDelete(el)
+    //     }
+    // }
 
-    async upload(file, id, place, key, progress, user = this.yin.me) {
-        if (file && id) {
-            return this.assign(await this.api.upload(file, id, place, key, progress, user));
+    async upload(name, data, place, progress, user = this.yin.me) {
+        place = Place.create(place)
+        const parent = await this.get(place.id, user)
+        await parent._manageable(user)
+        if (this.yin.File.Types.includes(parent._schemaMix[place.key]?.type)) {
+            const object = await this.yin.File.create(`/yin.file/${user._place}/${name || ''}`, data, progress, user)
+            parent[place.key] = object._path
+            await parent._save(user)
+            return object._path
         }
-        return Promise.reject({status: "FORBIDDEN", message: "文件或ID格式不对"});
+        return yinStatus.NOT_ACCEPTABLE(`${place}不能上传文件`)
     }
 
-    async uploadDirectory(file, id, place = "data", key = "sub", progress, user) {
-        if (file && id) {
-            return this.assign(await this.api.uploadDirectory(file, id, place, key, progress, user));
-        }
-        return Promise.reject({status: "FORBIDDEN", message: "文件或ID格式不对"});
-    }
-
-    async pushChildren(el, placeString, user = this.yin.me) {
-        if (!el._id) el = await this.get(el);
-        // el = await this.get(el, user);
-        // const rights = this.rights(el, user);
-        // if (rights.write()) {
-        const {slot, units, id, place, key} = this.yin.parsePlaceString(placeString), keyString = place + "." + key;
-        switch (slot) {
-            case "Array":
-                el.children[keyString] = el.children[keyString] || [];
-                el.children[keyString].push(units + "-" + id);
-                break;
-            case "Object":
-                el.children[keyString] = units + "-" + id;
-        }
-        return el.save(user);
-        // } else return Promise.reject({
-        //     status: "FORBIDDEN",
-        //     message: "您没有修改" + this.name + " #" + el._id + " 的权限"
-        // });
-    }
-
-    async removeChildren(el, placeString, user = this.yin.me) {
-        if (!el._id) el = await this.get(el);
-        // el = await this.get(el, user);
-        // const rights = this.rights(el, user);
-        // if (rights.write()) {
-        const {Unit, id, place, key} = this.yin.parsePlaceString(placeString), keyString = place + "." + key,
-            childrenString = Unit + "-" + id;
-        if (el.children[keyString] === childrenString) {
-            delete el.children[keyString];
-            return el.save(user);
-        } else {
-            const cIndex = el.children[keyString].indexOf(childrenString);
-            if (cIndex !== -1) {
-                el.parents.splice(cIndex, 1);
-                return el.save(user);
-            }
-        }
-        return Promise.reject({status: "FORBIDDEN", message: el.name + " #" + el._id + " 下没有固定此元素"});
-        // }
-        // return Promise.reject({status: "FORBIDDEN", message: "您没有修改" + el.name + " #" + el._id + " 的权限"});
-    }
 
     async find(filter = {}, sort = {}, limit = 50, skip = 0, user = this.yin.me) {
         const list = new YinArray({filter, sort}, this, user);
@@ -366,16 +385,12 @@ export class Module {
     }
 
     async findOne(filter, user = this.yin.me) {
-        const m = await this.api.findOne(filter), o = await this.assign(m)
-        if (await o._readable(user)) return o;
-        return yinStatus.UNAUTHORIZED((user ? user.username + "#" + user._id : "匿名用户") + "没有查看该" + this.title + "的权限");
+        const m = await this.api.findOne(filter), o = await this.assign(m, user)
+        await o._readable(user)
+        return o;
     }
 
     async runFunction(place, req, user = this.yin.me) {
-        // const p = Place.create(place), object = await this.get(p.id, user), key = object._schema[p.key]
-        // if (key.type !== 'Function') return yinStatus.NOT_ACCEPTABLE(`#${place} 不是功能类型`)
-        // if (!this.yin.client) await object._refresh()
-        // await object._manageable(user)
         return this.api.runFunction(place, req, user)
     }
 }

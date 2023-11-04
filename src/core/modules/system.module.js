@@ -1,21 +1,30 @@
 import {Module} from "../core/module.js";
 import {yinObject} from "../core/object.js";
 import {yinStatus} from "../lib/yin.status.js";
+import {yinConsole} from "../lib/yin.console.js";
 
 export class SystemObject extends yinObject {
 
+    /**
+     * 系统对象仅由根用户读取
+     * @param user
+     * @return {Promise<*|boolean>}
+     * @private
+     */
     async _readable(user) {
-        return this._manageable(user)
+        if (user === this._yin.me)
+            return true
+        return yinStatus.UNAUTHORIZED(`用户User #${user && user._id} 没有读取 ${this._name} #${this._id} 的权限`)
     }
 
-    async _manageable(user) {
-        if (!user)
-            user = this._module.yin.me
-        if (user._isRoot && user === this._module.yin.me)
-            return true
-        if (!user._id)
-            return yinStatus.UNAUTHORIZED(`用户User #匿名 没有管理 ${this._name} #${this._id} 的权限`)
-        if (this._module.yin.me?._isRoot && (user._id === this._module.yin.me._id))
+    /**
+     * 系统对象仅由根用户管理
+     * @param user
+     * @return {Promise<*|boolean>}
+     * @private
+     */
+    async _manageable(user = this._yin.me) {
+        if (user === this._yin.me)
             return true
         return yinStatus.UNAUTHORIZED(`用户User #${user._id} 没有管理 ${this._name} #${this._id} 的权限`)
     }
@@ -26,5 +35,9 @@ export class SystemModule extends Module {
     name = 'System'
     title = '系统'
     Object = class System extends SystemObject {
+    }
+
+    clearCache() {
+        // console.log(...yinConsole.warn(`#${this.name}`, '不参与内存回收'))
     }
 }

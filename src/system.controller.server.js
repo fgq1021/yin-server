@@ -2,8 +2,6 @@ import {ControllerServer} from "./controller.server.js";
 import {yinStatus} from "./core/index.js";
 
 export class SystemControllerServer extends ControllerServer {
-    name = 'System'
-
     create(object, user) {
         if (user && user === this.yin.me)
             return super.create(object, user)

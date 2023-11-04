@@ -15,7 +15,8 @@ export const yinConsole = {
             }
             log[1] = makeStyle(color[0]) + 'border-radius:2px 0 0 2px'
             log[2] = makeStyle(color[3]) + 'border-radius:0 2px 2px 0'
-        } else {
+        }
+        else {
             log[1] = makeStyle(color[0])
         }
         return [...log, ...data]
@@ -37,6 +38,9 @@ export const yinConsole = {
     },
     update(...data) {
         return this.makeLog(data, yinColor.blue, '↑')
+    },
+    delete(...data) {
+        return this.makeLog(data, yinColor.orange, 'X')
     }
 }
 

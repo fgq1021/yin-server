@@ -17,7 +17,8 @@ export class ResList {
         if (list.list && !option) {
             this.list = list.list
             option = list
-        } else {
+        }
+        else {
             this.list = list
         }
         delete option.list
@@ -58,11 +59,16 @@ export class YinArray extends Array {
         hideProperty(this, 'option')
     }
 
+    async all() {
+        await this.get(this.option.total)
+    }
+
     async get(num, skip = this.option.$skip) {
         if (this.loading) await this.loading
         if (this.api.place) {
             this.loading = this.children(num, skip)
-        } else {
+        }
+        else {
             this.loading = this.getFromController(num, skip)
         }
         await this.loading
@@ -101,7 +107,8 @@ export class YinArray extends Array {
             await this.api.assign(res.list[i])
             try {
                 this[skip + Number(i) - cantRead] = await this.api.get(res.list[i]._id, this.user)
-            } catch (e) {
+            }
+            catch (e) {
                 cantRead++
             }
             // const object = await this.api.get(res.list[i]._id,this.user)
@@ -138,6 +145,24 @@ export class YinArray extends Array {
     toJSON() {
         return new ResList(this.map(v => v), this.option)
     }
+
+    concat(...items) {
+        const list = []
+        for (let v of this) list.push(v)
+        return list.concat(...items)
+    }
+
+    /**
+     * 事件
+     * @param {'mounted'|'push'|'remove'} event
+     * @param {function} fn
+     * @return {this}
+     */
+    on(event, fn) {
+        this.api.eventFn[event] ??= [];
+        this.api.eventFn[event].push(fn)
+        return this
+    }
 }
 
 
@@ -168,6 +193,10 @@ export class YinChildren {
             this.userList = this.yin.reactive({})
     }
 
+    get _place() {
+        return this.place
+    }
+
     get fixedList() {
         if (this.parent && this.parent._map[this.place.key] instanceof Array)
             return this.parent._map[this.place.key]
@@ -196,21 +225,20 @@ export class YinChildren {
                 keyName = '可读取'
                 break
             default:
-                keyName = this.parent._schemaMix[this.place.key]?.title
+                keyName = this.parent._schemaMix[this.place.key]?.title || this.place.key
         }
         return ['#' + this.place['id.key.index'], "[" + this.module.name + "]", this.parent._title + '.' + keyName + '.' + this.place.index, this.list.length + '/' + this.total]
         //  return ['#' + this.place, "[" + this.module.name + "]", this.parent._title + '.' + keyName + '.' + this.place.index, this.list.length + '/' + this.total]
     }
 
     async init() {
-        this.loading = this.module.get(this.place.id, this.yin.me)
-        this.parent = await this.loading
-        this.module.api.watch(this.place)
-        this.loading = this.getFixedList()
-        await this.loading
-        this.loading = false
+        // console.log('init - ' + this.place)
+        this.parent = await this.module.get(this.place.id, this.yin.me)
+        // this.module.api.watch(this.place)
+        await this.getFixedList()
         await this.getFromController(10, this.fixed)
         await this.getFromCache(this.fixed, 0)
+        await this.runEventFn('mounted')
         return this
     }
 
@@ -271,7 +299,8 @@ export class YinChildren {
                 try {
                     const object = await this.yin.get(p)
                     object._removeEvent('delete', this.fixDeleteFunctionList[p])
-                } catch (e) {
+                }
+                catch (e) {
                 }
             }
             for (let i in this.fixedList) {
@@ -282,13 +311,15 @@ export class YinChildren {
                             // console.log('object delete in fixedList', i, object._place.valueOf())
                             this.parent._map[this.place.key].splice(i, 1);
                             await this.parent._save(this.yin.me);
-                        } else {
+                        }
+                        else {
                             console.log('!!!!!!!!!!!!!!!')
                             console.log('object delete in fixedList', i, object._place.valueOf(), this.parent._map[this.place.key])
                         }
                     }
                     object._on('delete', this.fixDeleteFunctionList[object._place])
-                } catch (e) {
+                }
+                catch (e) {
                     if (e.status === "NOT_FOUND") {
                         deleteList.push(i)
                     }
@@ -308,9 +339,12 @@ export class YinChildren {
         if (this.loading) await this.loading
         this.loading = this._getFromController(limit, skip)
         return this.loading
+
+        // return this._getFromController(limit, skip)
     }
 
     async _getFromController(limit = 50, skip = 0) {
+        // console.assert(false, this.place.valueOf(), limit, skip)
         let res = await this.module.api.children(this.place, limit, skip)
         this.childrenTotal = res.total - this.fixed
         for (let i in res.list) {
@@ -319,14 +353,16 @@ export class YinChildren {
         }
         if (skip) {
             console.log(...yinConsole.load(...this.logMark, limit, skip));
-        } else {
+        }
+        else {
             console.log(...yinConsole.load(...this.logMark));
         }
         this.loading = false
         return res
     }
 
-    async getFromCache(limit = 50, skip = 0, user) {
+    async getFromCache(limit = 50, skip = 0, user = this.yin.me) {
+        if (this.loading) await this.loading
         await this.parent._readable(user)
         limit = Number(limit)
         skip = Number(skip)
@@ -334,7 +370,8 @@ export class YinChildren {
         let i = skip, manageable
         try {
             manageable = await this.parent._manageable(user)
-        } catch (e) {
+        }
+        catch (e) {
 
         }
 
@@ -342,11 +379,13 @@ export class YinChildren {
             if (i < this.fixed) {
                 try {
                     res.push(await this.yin.get(this.fixedList[i], user));
-                } catch (e) {
+                }
+                catch (e) {
                     if (e.status !== "NOT_FOUND" && manageable)
                         res.push({_id: this.fixedList[i], _hide: true})
                 }
-            } else {
+            }
+            else {
                 const c = i - this.fixed
                 let subId = this.children[c];
                 if (!subId) {
@@ -356,7 +395,8 @@ export class YinChildren {
                 try {
                     const el = await this.module.get(subId, user);
                     res.push(el);
-                } catch (e) {
+                }
+                catch (e) {
                     if (e.status === "NOT_FOUND")
                         notFoundList.push(i);
                 }
@@ -391,6 +431,8 @@ export class YinChildren {
             return this.childrenRefresh(id, 'pushFirst')
         }
 
+        //  console.log(this.children.length, this.childrenTotal)
+
         if (this.children.length === this.childrenTotal) {
             await this.getFromController(1, this.total)
             if (this.children[this.childrenTotal - 1] === id) {
@@ -411,6 +453,7 @@ export class YinChildren {
     // }
 
     async childrenRefresh(id, type) {
+        // console.assert(false, this.place.valueOf(), id, type)
         let length = 0
         switch (type) {
             case 'pushFirst':
@@ -466,10 +509,13 @@ export class YinChildren {
             await this.userList[u].refresh(length)
         }
         if (type === 'delete')
-            this.parent.childrenDeleted(id)
+            this.runEventFn('remove', id)
         else
-            this.parent.childrenPushed(id)
-        this.module.objectUpdate(this.place, {type, changeId: id});
+            this.runEventFn('push', id)
+
+        // this.module.objectUpdate(this.place, {type, changeId: id});
+        // this.runEventFn(type, length, id)
+        this.module.yin.objectEvent(this, type, id, length)
     }
 
     create(object) {
@@ -482,5 +528,57 @@ export class YinChildren {
 
     unFix(index, user) {
         return this.parent._unfixChild(index, this.place.key, user)
+    }
+
+    eventFn = {};
+
+
+    /**
+     * 事件
+     * @param {'mounted'|'push'|'remove'} event
+     * @param {function} fn
+     * @return {this}
+     */
+    on(event, fn) {
+        this.eventFn[event] ??= [];
+        this.eventFn[event].push(fn)
+        return this
+    }
+
+    removeEvent(event, fn) {
+        if (this.eventFn[event]) {
+            const i = this.eventFn[event].indexOf(fn)
+            if (i !== -1) this.eventFn[event].splice(i, 1)
+        }
+        return this
+    }
+
+
+    async runEventFn(event, ...args) {
+        const ce = 'children' + event.charAt(0).toUpperCase() + event.slice(1)
+        if (this.module[ce]) await this.module[ce](this, ...args)
+        if (this.module.api[ce]) await this.module.api[ce](this, ...args)
+
+        let res
+        // if (this[event]) {
+        //     try {
+        //         res = await this[event](...args)
+        //     }
+        //     catch (e) {
+        //         console.log(...yinConsole.error(`#${this.place}`, `${event}() 运行出错\n`, e));
+        //     }
+        // }
+        const list = this.eventFn[event];
+        if (list)
+            for (let i in list) {
+                try {
+                    await list[i](...args)
+                }
+                catch (e) {
+                    console.log(...yinConsole.error(`#${this.place}`, `on('${event}') 运行出错\n`, e));
+                }
+            }
+        await this.module.yin.objectEvent(this, ce, ...args)
+        return res;
     }
 }

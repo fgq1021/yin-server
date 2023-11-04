@@ -18,7 +18,6 @@
 // }
 
 
-
 //core
 export * from './core/yin.js'
 export * from './core/object.js'
@@ -27,8 +26,13 @@ export * from './core/module.js'
 export * from './core/array.js'
 export * from './core/place.js'
 export * from './core/type.js'
-export * from './core/controller.client.js'
+export * from './core/cab.js'
 
+//client
+export * from './client/controller.client.js'
+export * from './client/yin.client.js'
+export * from './client/user.controller.client.js'
+export * from './client/file.controller.client.js'
 
 //lib
 export * from './lib/yin.request.js'
@@ -37,10 +41,11 @@ export * from './lib/yin.color.js'
 export * from './lib/yin.console.js'
 export * from './lib/yin.status.js'
 export * from './lib/yin.defineProperty.js'
-
+export * from './lib/yin.file.path.js'
 
 //basic modules
 export * from './modules/element.module.js'
 export * from './modules/model.module.js'
 export * from './modules/system.module.js'
 export * from './modules/user.module.js'
+export * from './modules/file.module.js'

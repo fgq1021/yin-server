@@ -1,0 +1,2 @@
+import{d as e,_ as t,o as n,c as o}from"./index-8d1328d9.js";const s=e({name:"AuthDevice",mounted(){this.$yin.me._id?location.replace(`yin-desktop://${JSON.stringify({token:this.$yin.me._token})}`):this.$router.push("/auth")}});function _(c,a,i,u,p,r){return n(),o("p",null,"正在跳转")}const l=t(s,[["render",_],["__scopeId","data-v-eb5e7a93"]]);export{l as default};
+//# sourceMappingURL=AuthDevice-fb08dc0a.js.map

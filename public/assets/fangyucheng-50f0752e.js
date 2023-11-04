@@ -1,0 +1,2 @@
+import{d as e,_ as o,o as n,c as t}from"./index-8d1328d9.js";const r=e({name:"fangyucheng",mounted(){console.log(1111)}}),s={style:{color:"orange","text-shadow":"orange 0 0 88px",border:"13px solid orange","border-radius":"55px","font-size":"600px","line-height":"1",margin:"0","font-weight":"100"}};function a(c,d,i,p,u,f){return n(),t("h1",s,"大方昱程")}const _=o(r,[["render",a]]);export{_ as default};
+//# sourceMappingURL=fangyucheng-50f0752e.js.map

@@ -1,29 +1,48 @@
 import {yinStatus} from "../lib/yin.status.js";
 import {Key} from "./key.js";
-import {Place} from "./place.js";
+import {Place, PlaceArray} from "./place.js";
 import {hideProperty} from "../lib/yin.defineProperty.js";
 import {yinAssign, yinParse} from "../lib/yin.assign.js";
 import {Types} from "./type.js";
+import {yinConsole} from "../lib/yin.console.js";
+import {yinFilePath} from "../lib/yin.file.path.js";
+
+export const IdHex = /^[0-9A-Fa-f]{24}$/
 
 export class Schema extends Array {
     static get [Symbol.species]() {
         return Array;
     }
 
-    static create(schema) {
-        const _schema = new Proxy(new this(), {
-            set(target, p, key) {
+    static create(schema = [], object) {
+        let set, mounted
+        if (object)
+            set = (target, p, key) => {
                 if (Number.isInteger(Number(p))) {
+                    const _key = target[p]
                     target[p] = Key.create(key)
-                    target.__changed(target[p])
-                    target[p].change(key => {
-                        target.__changed(key)
-                    })
-                } else {
-                    target[p] = key
+                    if (_key) {
+                        if (_key.name !== key.name || _key.keyType !== key.keyType)
+                            this.mapKey(object, target[p])
+                    }
+                    else if (mounted) this.mapKey(object, target[p])
+
+                    target[p].onChange = key => {
+                        this.mapKey(object, key)
+                    }
                 }
+                else target[p] = key
                 return true
-            },
+            }
+        else
+            set = (target, p, key) => {
+                if (Number.isInteger(Number(p))) target[p] = new Key(key)
+                else target[p] = key
+                return true
+            }
+
+        const _schema = new Proxy(new Schema(), {
+            set,
             get(target, p) {
                 if (target.hasOwnProperty(p) || target[p]) return target[p]
                 for (let i in target) {
@@ -35,13 +54,40 @@ export class Schema extends Array {
                 return target[p]
             }
         })
-        hideProperty(_schema, '__eventFn')
-        Object.assign(_schema, schema)
+
+        const schemaMix = []
+        for (let key of schema) {
+            const i = schemaMix.findIndex(mKey => mKey.name === key.name)
+            if (i === -1) schemaMix.push(key)
+            else yinAssign(schemaMix[i], key)
+        }
+
+        Object.assign(_schema, schemaMix)
+        mounted = true
         return _schema
     }
 
+    static mapKey(object, key) {
+        if (key.name && key.type) {
+            delete object._setter[key.name]
+            delete object._getter[key.name]
+            object._mapKey(key)
+            if (object._.script?._setter && object._.script?._setter[key.name]) object._setter[key.name] = object._.script._setter[key.name]
+            if (object._.script?._getter && object._.script?._getter[key.name]) object._getter[key.name] = object._.script._getter[key.name]
+            if (object._.script[key.name]) object[key.name] = object._.script[key.name]
+
+            // if (object._name === 'Model') {
+            //     for (let o of object._module?.yin.cacheList || []) {
+            //         if (o._model?.valueOf() === object._id) {
+            //             this.mapKey(o, key)
+            //         }
+            //     }
+            // }
+        }
+    }
+
     toDataBaseSchema(ObjectId) {
-        const schema = {}
+        const schema = {_maps: []}
         for (let key of this) {
             const t = Types[key.type], name = '_' + key.name
             if (t?.defaultConstructor === 'ObjectId')
@@ -66,26 +112,37 @@ export class Schema extends Array {
         return schema
     }
 
-    __eventFn = [];
-
-    __change(fn) {
-        this.__eventFn.push(fn)
-        return this
-    }
-
-    __removeEvent(fn) {
-        const i = this.__eventFn.indexOf(fn)
-        if (i !== -1) this.__eventFn.splice(i, 1)
-        return this
-    }
-
-    async __changed(msg) {
-        for (let fn of this.__eventFn) {
-            fn && await fn(msg)
-        }
-        return true;
-    }
+    // async __mapKey(key) {
+    //     console.log(this.object._titlePlace, key.name, '//////////////')
+    //     if (key.name && key.type) {
+    //         this.object._mapKey(key)
+    //         // if (this.object._name === 'Model') {
+    //         //     for (let o of this.object._module?.yin.cacheList || []) {
+    //         //         if (o._model?.valueOf() === this.object._id) {
+    //         //             // o._clearKey = key.name
+    //         //             o._mapKey(o._schemaMix[key.name])
+    //         //         }
+    //         //     }
+    //         // }
+    //     }
+    // }
 }
+
+export const basicFunctionSchema = [
+    {name: '_save', title: '保存', type: 'Function', note: '保存该对象'},
+    {name: '_delete', title: '删除', type: 'Function', note: '删除该对象'},
+]
+
+export const basicEventSchema = [
+    {name: 'read', title: '读取事件', type: 'Function', note: '该对象被读取时运行的函数'},
+    {name: 'mounted', title: '加载事件', type: 'Function', note: '该对象被加载时运行的函数'},
+    {name: 'created', title: '创建事件', type: 'Function', note: '该对象创建时运行的函数'},
+    {name: 'beforeSave', title: '保存前事件', type: 'Function', note: '该对象保存前运行的函数'},
+    {name: 'saved', title: '保存事件', type: 'Function', note: '该对象保存后运行的函数'},
+    {name: 'update', title: '更新事件', type: 'Function', note: '该对象更新时运行的函数（保存不一定触发更新）'},
+    {name: 'beforeDelete', title: '删除前事件', type: 'Function', note: '该对象删除前运行的函数'},
+    {name: 'deleted', title: '删除事件', type: 'Function', note: '该对象删除后运行的函数'},
+]
 
 
 export const basicSchema = Schema.create([
@@ -134,6 +191,12 @@ export const basicSchema = Schema.create([
         title: '子映射',
         type: 'Children'
     },
+    // {
+    //     name: 'maps',
+    //     title: '所有映射',
+    //     default: [],
+    //     private: true
+    // },
     {
         name: 'model',
         title: '模型',
@@ -157,8 +220,21 @@ export const basicSchema = Schema.create([
     }
 ])
 
+
 /**
- * 引[对象OS] 中最基础的对象Class，一切结构都是由此推展开来
+ * todo 从键值直接拿到yinObject的空客篓子，而不是objectKey，要拿到数据直接await一下
+ * example yinObject next
+ * {
+ *     _id:...,
+ *     _module:{},
+ *     _loading:true,
+ *     toJSON(){return undefined}
+ *     async then(res,rej){...}
+ * }
+ */
+
+/**
+ * 引[对象OS] 中最基础的对象Class，一切结构都是由此拓展开来
  */
 export class yinObject {
     /**
@@ -170,29 +246,61 @@ export class yinObject {
     //TODO 保留这个临时集合，还是把所有临时数据都放在第一层来Proxy？，然后用hideKeys来隐藏
     _ = {
         model: undefined,
+        script: {},
         eventFn: {},
-        keyWaiter: {}
     }
-    /**
-     * 当此值为false时，对该对象赋值不会触发更新
-     * @private
-     */
-    _initialized
+    // /**
+    //  * 当此值为false时，对该对象赋值不会触发更新
+    //  * @private
+    //  */
+    // _initialized
     /**
      * 当此值为true时，对该对象赋值不会触发更新
      * @private
      */
-    _hold
+    _hold = true
     _changed
-    _saving = false
-    _saveWaiter
+    // _saving = false
+    // _saveWaiter
+
+    _waiter
+    _readAt
+
+    async _wait() {
+        try {
+            const res = await this._waiter
+            delete this._waiter
+            return res
+        }
+        catch (e) {
+            delete this._waiter
+            return Promise.reject(e)
+        }
+    }
+
+    async _nextTick() {
+        try {
+            await this._wait()
+        }
+        catch (e) {
+
+        }
+    }
 
     get _place() {
         return new Place(this._module, this._id)
     }
 
+    get _titlePlace() {
+        return this._module.title + '.' + this._title
+    }
+
     get _name() {
         return this._module?.name
+    }
+
+    get _yin() {
+        return this._module?.yin
     }
 
     /**
@@ -208,12 +316,12 @@ export class yinObject {
     _updatedAt
     _createdAt
 
-    constructor(module, id) {
+    constructor(module) {
         this._module ??= module
     }
 
-    static hideKeys = ['_', '__v', '_changed', '_saving', '_isDelete',
-        '_module', '_setter', '_getter', '_eventFn', '_keyWaiter', '_initialized', '_saveWaiter']
+    static hideKeys = ['_', '__v', '_changed', '_saving', '_isDeleted', '_readAt',
+        '_module', '_setter', '_getter', '_eventFn', '_hold', '_waiter']
 
 
     /**
@@ -224,29 +332,45 @@ export class yinObject {
      */
     static create(object = {}) {
         const o = new Proxy(new this(this.module), {
-            deleteProperty: (target, p) => {
-                if (target._map[p])
-                    delete target._map[p]
-                else
-                    delete target[p]
+            deleteProperty: (target, key) => {
+                if (target._map[key])
+                    delete target._map[key]
+                delete target[key]
+                if (!this.hideKeys.includes(key) && target._hold !== true && key !== target._hold) {
+                    const proxy = target._module.list[target._id]
+                    proxy._changed = true
+                    this.module.pull(proxy, key, target[key])
+                }
                 return true
             },
             get: (target, key, proxy) => {
-                // console.log('get', target._title, key, target[key], target._getter, this.getter[key])
-                if (target._getter[key]) return target._getter[key].call(proxy, target);
-                else if (this.getter[key]) return this.getter[key].call(proxy, target);
+                target._readAt = Date.now()
+                // console.log('get', target._title, key, target[key], target._getter[key], this.getter[key])
+                if (target._getter[key] instanceof Function) return target._getter[key].call(proxy, target);
+                else if (this.getter[key] instanceof Function) return this.getter[key].call(proxy, target);
+                else if (this.events.includes(key)) return (...args) => target._runEventFn(proxy, key, ...args)
+                else if (key === '_isYinProxy') return true
                 else return target[key]
+
+                //TODO 在toJSON时直接返回target
+                // if (key === 'toJSON') {
+                //     return () => target
+                // }
             },
             set: (target, key, value, proxy) => {
-                // console.log('set', target._title, key, value, target._setter[key], this.setter[key])
-                // if (!target._initialized && this.hideKeys.indexOf(key) === -1) {
-                //     console.log(Date.now())
+                // console.log('set', target._titlePlace, key, value, target._setter[key], this.setter[key])
+                // if (key === '_clearKey') {
+                //     delete target._setter[value]
+                //     delete target._getter[value]
+                //     delete target[value]
+                //     return true
                 // }
+                // console.log(proxy)
                 let setStatus = true
-                if (target._setter[key]) setStatus = target._setter[key].call(proxy, value, target, proxy);
-                else if (this.setter[key]) setStatus = this.setter[key].call(proxy, value, target, proxy);
+                if (target._setter[key] instanceof Function) setStatus = target._setter[key].call(proxy, value, target);
+                else if (this.setter[key] instanceof Function) setStatus = this.setter[key].call(proxy, value, target);
                 else target[key] = value
-                if (setStatus && !target._hold && target._initialized && this.hideKeys.indexOf(key) === -1) {
+                if (setStatus && !this.hideKeys.includes(key) && target._hold !== true && key !== target._hold) {
                     proxy._changed = true
                     this.module.pull(proxy, key, target[key])
                 }
@@ -256,7 +380,7 @@ export class yinObject {
         for (let k of this.hideKeys)
             hideProperty(o, k)
         Object.assign(o, object)
-        o._initialized = true
+        o._hold = undefined
         return o
     }
 
@@ -294,49 +418,32 @@ export class yinObject {
             return true
         },
         _model(value, object) {
-            object._model = value
-            if (value) {
-                object._.model = object._module?.yin.Model.getFromCache(value)
-                if (object._.model) {
-                    object._.model._schema.__change(key => {
-                        object._mapKey(key)
-                    })
-                    object._mapSchema()
-                }
+            const id = Place.idSetter(value)
+            if (id === false)
+                return false
+            object._model = id
+            if (object._model) {
+                object._.model = object._module?.yin.Model.getFromCache(object._model)
+                if (object._.model && object._.model._schema.length) this._mapSchema()
             }
             return true
         },
         _schema(value = [], object) {
-            object._schema = Schema.create(value)
-            object._schema.__change(key => {
-                object._mapKey(key)
-            })
-            object._mapSchema()
+            // console.log(this._title, '_schema set', !(object._schema instanceof Schema) || object._schema.length > value.length)
+            if (!(object._schema instanceof Schema) || object._schema.length > value.length) {
+                object._schema = Schema.create(value, this)
+                if (value.length) this._mapSchema()
+            }
+            else
+                Object.assign(object._schema, value)
             return true
         },
-        // /**
-        //  * 需要在map变更中处理更新函数
-        //  * @param value
-        //  * @param object
-        //  * @return {boolean}
-        //  * @private
-        //  */
         _map(value, object) {
-            // const old = object._map
-            object._map = _mapProxy(value)
-            // if (JSON.stringify(old) !== '{}')
-            //     object._module.mapChange(this, old)
+            object._map = yinMap.create(value)
             return true
         },
-        /**
-         * 需要在parents变更中处理更新函数
-         * @param value
-         * @param object
-         * @return {boolean}
-         * @private
-         */
-        _parents: (value, object) => {
-            object._parents = new Parents(...value)
+        _parents(value = [], object) {
+            object._parents = new Parents(value, this)
             return true
         }
     }
@@ -359,24 +466,24 @@ export class yinObject {
     _schema = []
 
     get _schemaMix() {
-        const schemaMix = this._.model?._schema || []
+        const schemaMix = Schema.create(this._.model?._schema || [])
         for (let key of this._schema) {
             const i = schemaMix.findIndex(mKey => mKey.name === key.name)
             if (i === -1) schemaMix.push(key)
             else schemaMix[i] = key
         }
-        return Schema.create(schemaMix)
+        return schemaMix
     }
 
     _mapSchema() {
         this._setter = {}
         this._getter = {}
-        const scripts = this._module.yin.scripts,
-            script = scripts[this._place] || scripts[this._.model?._place]
-        Object.assign(this, script)
+        const scripts = this._module.yin.scripts
+        this._.script = scripts[this._place] || scripts[this._.model?._place] || {}
         for (let key of this._schemaMix) {
             this._mapKey(key)
         }
+        yinAssign(this, this._.script)
     }
 
     /**
@@ -385,18 +492,35 @@ export class yinObject {
      * @private
      */
     _mapKey(key) {
+        // console.log(this._titlePlace, key.name, key.type)
         // if (key.private)
         //     this._privateKeys.push(key.name)
         if (key.type === 'Array') {
-            this[key.name] ??= ArrayKey.create(this, key.name)
             this._setter[key.name] = function (value, object) {
-                if (object._initialized === false) {
+                // console.log(object._hold, value)
+                if (object._hold === key.name) {
                     ArrayKey.findChange(this, key.name, value)
                 }
                 object[key.name] = ArrayKey.create(this, key.name, value)
                 return true
             }
-        } else if ((this._module?.yin?.structureType || ['System', 'Object']).indexOf(key.type) !== -1) {
+            if (!(this[key.name] instanceof ArrayKey))
+                this[key.name] = ArrayKey.create(this, key.name, this[key.name])
+        }
+        else if (key.type === 'File' || this._yin.File?.Types.includes(key.type)) {
+            this._setter[key.name] = function (value, object) {
+                // console.log(value, object, key)
+                if (value instanceof yinObject)
+                    object[key.name] = value._path
+                else if (typeof value === 'string' || value instanceof String)
+                    object[key.name] = value
+                return true
+            }
+            this._getter[key.name] = function (object) {
+                return new FileKey(object[key.name], this, key.name)
+            }
+        }
+        else if ((this._module?.yin?.structureType || ['System', 'Object']).indexOf(key.type) !== -1) {
             if (/^_/.test(key.name))
                 this._getter[key.name] = function (object) {
                     return new ObjectKey(object, key.name, key.type)
@@ -410,8 +534,9 @@ export class yinObject {
                      * 所以此位置不能通过赋值为null进行删除
                      * 请使用objectKey.remove()删除
                      */
-                    if (value)
-                        object._map[key.name] = value instanceof yinObject ? value._place : value
+                    value = Place.setter(value)
+                    if (value !== false)
+                        object._map[key.name] = value
                     if (value && object._name === 'Model' && object._schema[key.name]) {
                         object._schema[key.name].settings.manualCreation = true
                     }
@@ -421,14 +546,19 @@ export class yinObject {
                     return new ObjectKey(this, key.name)
                 }
             }
-        } else if (key.type === 'Function') {
-            if (!(this[key.name] instanceof Function)) {
-                this[key.name] = (req, user) => {
-                    return this._module.runFunction(this._place.toKey(key.name), req, user)
-                }
+        }
+        else if (key.type === 'Function') {
+            this[key.name] = (req, user) => {
+                return this._module.runFunction(this._place.toKey(key.name), req, user)
             }
         }
     }
+
+    // _atKey(object) {
+    //     for (let key in this._map) {
+    //
+    //     }
+    // }
 
     // _privateKeys = []
     // static privateKeys = []
@@ -439,87 +569,206 @@ export class yinObject {
             // if (key.private)
             //     this.privateKeys.push(name)
             if (key.type === 'Array')
-                this.setter[name] = (value, object, proxy) => {
-                    object[name] = ArrayKey.create(proxy, name, value)
+                this.setter[name] ??= function (value, object) {
+                    object[name] = ArrayKey.create(this, name, value)
                     return true
                 }
             else if ((this.module?.yin?.structureType || ['System', 'Object']).indexOf(key.type) !== -1) {
-                this.getter[name] = (object, proxy) => {
+                this.getter[name] ??= function (object) {
                     return new ObjectKey(object, name, key.type)
+                }
+                this.setter[name] ??= function (value, object) {
+                    const id = Place.idSetter(value)
+                    if (id === false)
+                        return false
+                    object[name] = id
+                    return true
+                    // if (value instanceof yinObject) object[name] = value._id
+                    // else if (value instanceof Place) object[name] = value.id
+                    // else if (typeof value === 'string') {
+                    //     if (/\./.test(value)) object[name] = new Place(value).id
+                    //     else object[name] = value
+                    // }
+                    // else return false
+                    // return true
                 }
             }
         }
     }
 
+    /**
+     * 获取所有在该对象范围内的对象 [this,...子对象,...子对象的子对象,...]
+     * @param {[]}list
+     * @return {Promise<*[]>}
+     * @private
+     */
+    async _entire(list = []) {
+        if (list.includes(this._place.valueOf()))
+            return []
+        list.push(this._place.valueOf())
+        const _list = []
+        for (let key of this._schemaMix) {
+            if (key.type === 'Array') {
+                const c = await this[key.name]
+                await c.all()
+                _list.push(...c)
+            }
+        }
+        for (let key in this._map) {
+            try {
+                if (this._map[key] instanceof Place)
+                    _list.push(await this._yin.get(this._map[key]))
+            }
+            catch (e) {
+
+            }
+        }
+        for (let object of _list) {
+            await object._entire(list)
+        }
+        return list
+    }
 
     /**
+     * 获取所有只属于该对象范围内的对象
+     * @return {Promise<*[]>}
+     * @private
+     */
+    async _entireAlone() {
+        const list = await this._entire(), aloneList = [this._place.valueOf()]
+        for (let i = 1; i < list.length; i++) {
+            const p = list[i],
+                child = await this._yin.get(p),
+                parents = await child._parents
+            if (parents.length <= 1)
+                aloneList.push(p)
+            else {
+                let match
+                for (let place of parents) {
+                    if (!list.includes(place['module.id'].valueOf())) {
+                        try {
+                            await this._yin.get(place)
+                            match = true
+                            break
+                        }
+                        catch (e) {
+
+                        }
+                    }
+                }
+                if (!match) aloneList.push(p)
+            }
+        }
+        return aloneList
+    }
+
+    _private
+
+    /**
+     * 用户读取权限检查
      * 匿名用户请传入{}
      * 如果留空则使用 yin.me
-     * @param user
+     * @param user 用户 - 传空则为yin.me
+     * @param title 权限名 - 用来覆盖默认值
      */
-    async _readable(user = this._module?.yin.me || {}) {
-        if (!this._private)
-            return true
-        if (!user._id)
-            return yinStatus.UNAUTHORIZED(`用户User #匿名 没有查看 ${this._name} #${this._id} 的权限`)
-        if (this._owner?.valueOf() === user._id)
-            return true
+    async _readable(user, title) {
+        if (!this._private) return
+        return this._privateReadableController(user, title)
+    }
 
+    /**
+     * 用户读取权限检查（）
+     * 匿名用户请传入{}
+     * 如果留空则使用 yin.me
+     * @param user 用户 - 传空则为yin.me
+     * @param title 权限名 - 用来覆盖默认值
+     */
+    async _privateReadableController(user, title) {
+        title ??= '读取'
         try {
-            const owner = await this._owner
-            if (owner._parents.indexOf(this._place.toIdKey('_read')) !== -1)
-                return true
-        } catch (e) {
-
+            await this._accessCheck(user, '_read', title)
         }
-        try {
-            return await this._manageable(user)
-        } catch (e) {
-            return yinStatus.UNAUTHORIZED(`用户User #${user._id} 没有查看 ${this._name} #${this._id} 的权限`)
+        catch (e) {
+            return this._manageable(user, title)
         }
     }
 
     /**
+     * 用户管理权限检查
      * 匿名用户请传入{}
      * 如果留空则使用 yin.me
-     * @param user
+     * @param user 用户 - 传空则为yin.me
+     * @param title 权限名 - 用来覆盖默认值
      */
-    async _manageable(user = this._module?.yin.me || {}) {
+    async _manageable(user, title) {
+        return this._accessCheck(user, '_manage', title || '管理')
+    }
+
+    _accessControl = []
+
+    /**
+     * 用户权限检查
+     * 匿名用户请传入{}
+     * 如果留空则使用 yin.me
+     * @param user 用户 - 传空则为yin.me
+     * @param right 权限 - 要检查的权限，默认'_manage'
+     * @param title 权限的友好名
+     * @return {Promise<undefined|yinError>} 错误时返回Promise.reject(原因)
+     * @private
+     */
+    async _accessCheck(user = this._module?.yin.me || {}, right = '_manage', title = '管理') {
+        /**
+         * 管理员检查
+         */
+        if (user._isRoot && user === this._module.yin.me) return
         /**
          * 匿名检查
          */
         if (!user._id)
-            return yinStatus.UNAUTHORIZED(`用户User #匿名 没有管理 ${this._name} #${this._id} 的权限`)
+            return yinStatus.FORBIDDEN(`用户User #匿名 没有${title} ${this._name} #${this._id} 的权限`)
         /**
          * 所有者检查
          */
-        if (this._owner.valueOf() === user._id)
-            return true
+        if (this._owner.valueOf() === user._id) return
+
         /**
-         * 管理员检查
+         * 所有者赋予了那些用户全部对象的该权限
          */
-        if (this._module?.yin.me._isRoot && (user === this._module.yin.me))
-            return true
-        /**
-         * 可管理者检查
-         * @type {*}
-         */
+        const accessPlace = user._place.toIdKey(right)
         try {
             const owner = await this._owner
-            if (owner._parents.indexOf(this._place.toIdKey('_manage')) !== -1)
-                return true
-        } catch (e) {
+            if (owner._parents.includes(accessPlace)) return
+        }
+        catch (e) {
 
         }
-        return yinStatus.UNAUTHORIZED(`用户User #${user._id} 没有管理 ${this._name} #${this._id} 的权限`)
+        /**
+         *  该对象赋予了那些用户该权限
+         */
+        const userReadLength = accessPlace.length + 1
+        for (let ac of this._accessControl) {
+            if (`${accessPlace}.` === ac.slice(0, userReadLength)) return
+        }
+        return yinStatus.UNAUTHORIZED(`用户User #${user._id} 没有${title} ${this._name} #${this._id} 的权限`)
     }
 
 
-    _refresh() {
-        if (this._module.listWaiter[this._id]) return this._module.listWaiter[this._id]
-        this._module.listWaiter[this._id] = this._module.getFromController(this._id)
-        return this._module.getFromController(this._id)
+    async _refresh() {
+        await this._nextTick()
+        if (this._module.listWaiter[this._id]) this._waiter = this._module.listWaiter[this._id]
+        else this._waiter = this._module.getFromController(this._id)
+        return this._wait()
     }
+
+
+    async _upload(name, data, key, progress, user) {
+        return this._module.upload(name, data, this._place.toKey(key), progress, user)
+    }
+
+
+    // async _parent(){
+    //
+    // }
 
     async _createChild(object = {}, key, user) {
         let req = yinParse(object)
@@ -544,25 +793,32 @@ export class yinObject {
             if (!(req._parents instanceof Array)) req._parents = []
             req._parents.push(this._id + '.' + k.name)
         }
-        req._title ??= k.title
-        if (!req._model && this._name !== 'Model')
-            try {
-                const parentModel = await this._model
-                if (parentModel._id !== this._id) {
-                    const models = await parentModel[k.name], model = models._id ? models : models[0]
-                    if (model._id) {
-                        req._model = model._id
-                    }
-                }
-            } catch (e) {
-                // console.log(e)
-            }
-        if (req._model) {
-            const model = await this._module.yin.Model.get(req._model)
-            for (let {name} of model._schema) {
-                req[name] ??= model[name]
+
+
+        if (!req._model) {
+            const models = await this[k.name].models()
+            if (models.length) {
+                req._model = models[0]._id
+                req._title ??= models[0]._title
             }
         }
+        req._title ??= k.title
+        // try {
+        //     const parentModel = await this._model
+        //     const models = await parentModel[k.name], model = models._id ? models : models[0]
+        //     if (model._id) {
+        //         req._model = model._id
+        //     }
+        // }
+        // catch (e) {
+        //     // console.log(e)
+        // }
+        // if (req._model) {
+        //     const model = await this._module.yin.Model.get(req._model)
+        //     for (let {name} of model._schema) {
+        //         req[name] ??= model[name]
+        //     }
+        // }
 
         // console.log('_createChild', module, req)
         return this._module.yin[module].create(req, user)
@@ -574,11 +830,13 @@ export class yinObject {
         if (k.type === 'Array' && o._name === this._name) {
             o._parents.push(this._place.toIdKey(k))
             return o._save(user)
-        } else if (k.type === 'Array') {
+        }
+        else if (k.type === 'Array') {
             if (!this._map[k.name] instanceof Array)
                 this._map[k.name] = []
             this._map[k.name].push(o._place)
-        } else if (this._module.yin.structureType.indexOf(k.type) !== -1)
+        }
+        else if (this._module.yin.structureType.indexOf(k.type) !== -1)
             this._map[k.name] = o._place
         return this._save(user)
     }
@@ -603,7 +861,8 @@ export class yinObject {
                     return this._save(user)
                 }
             }
-        } else if (this._module.yin.structureType.indexOf(k.type) !== -1) {
+        }
+        else if (this._module.yin.structureType.indexOf(k.type) !== -1) {
             if (this._map[k.name]?.valueOf() === o._place.valueOf()) delete this._map[k.name]
             return this._save(user)
         }
@@ -635,25 +894,60 @@ export class yinObject {
         await object._manageable(user)
         object._parents.push(this._place.toKey(key)['id.key'])
         await object._save(user)
-
         return this
     }
 
-    async _save(option, user) {
-        if (this._saving)
-            await this._saveWaiter
-        this._saveWaiter = this._module.save(this, option, user);
-        this._saving = true
-        const o = await this._saveWaiter
-        this._saving = false
-        return o
+
+    // /**
+    //  * 保存
+    //  * 此操作会延迟200ms进行，防止数据库访问过于频繁，也防止用户刷新过于频繁。
+    //  * 由于键值的变更会直接推送，所以除了对象结构变化之外并没有什么感觉。
+    //  * @param {UserObject} user
+    //  * @return {Promise<yinObject>}
+    //  * @private
+    //  */
+    // async _save(user) {
+    //     clearTimeout(this._saveTimer)
+    //     this._saveTimer = setTimeout(async () => {
+    //         await this._nextTick()
+    //         this._waiter = this._module.save(this, user)
+    //         await this._wait()
+    //     }, 200)
+    //     return this
+    // }
+
+
+    async _save(user) {
+        await this._nextTick()
+        this._waiter = this._module.save(this, user)
+        return this._wait()
     }
+
 
     async _delete(user) {
         return this._module.delete(this, user)
     }
 
-    _keyWaiter = {}
+    /**
+     * 复写
+     * 此操作不会删除以_开头的键值
+     * @param object
+     * @private
+     */
+    _overwrite(object) {
+        const h = this._hold
+        this._hold = true
+        for (let i in this) {
+            if (!/^_/.test(i)) {
+                delete this[i]
+            }
+        }
+        Object.assign(this, object)
+        this._mapSchema()
+        this._hold = h
+    }
+
+
     _eventFn = {};
 
     _on(event, fn) {
@@ -670,14 +964,34 @@ export class yinObject {
         return this
     }
 
-    _runEventFn(event, msg) {
-        for (let fn of this._eventFn[event] || []) {
-            //
-            // console.log('_runEventFn=================>')
-            // console.log(fn)
-            fn && fn(msg)
+    async _runEventFn(proxy, event, ...args) {
+        // console.log(this._title, event, this._module[event], this._module.api[event])
+        if (this._module[event]) await this._module[event](proxy, ...args)
+        if (this._module.api[event]) await this._module.api[event](proxy, ...args)
+
+        let res
+        if (this[event]) {
+            try {
+                res = await this[event].call(proxy, ...args)
+            }
+            catch (e) {
+                console.log(...yinConsole.error(`#${this._place}`, `${this._title}.${event}() 运行出错\n`, e));
+                // return Promise.reject(e)
+            }
         }
-        return true;
+        const list = this._eventFn[event] || [];
+        for (let i in list) {
+            if (list[i] instanceof Function)
+                try {
+                    await list[i](...args)
+                }
+                catch (e) {
+                    console.log(...yinConsole.error(`#${this._place}`, `${this._title}._on('${event}') 运行出错\n`, e));
+                    // return Promise.reject(e)
+                }
+        }
+        await this._module.yin.objectEvent(proxy, event, ...args)
+        return res;
     }
 
     // _toJson() {
@@ -700,39 +1014,103 @@ export class yinObject {
     //     return ''
     // }
 
+
     /**
      * 生命周期函数
      */
 
-    // mounted(user) {
-    // }
 
-    beforeDestroy(user) {
+
+        //  beforeDestroy(user) {
+        //  }
+
+    static events = [
+        'mounted', 'read',
+        'created',
+        'beforeSave', 'saved',
+        'update',
+        'beforeDelete', 'deleted']
+
+    // 应该绑定在children
+    // 'childrenSaved', 'childrenIncreased', 'childrenDecreased']
+
+
+    /**
+     * 读取事件，会被云端触发
+     * @param user
+     */
+    read(user) {
     }
 
+    /**
+     * 对象被加载事件，仅本地事件，不会被云端触发
+     * @param user
+     */
+    mounted(user) {
+    }
+
+    /**
+     * 创建完成事件，仅本地事件，不会被云端触发
+     * @param user
+     */
     created(user) {
     }
 
+    /**
+     * 即将保存事件，仅本地事件，不会被云端触发
+     * @param user
+     */
     beforeSave(user) {
     }
 
+
+    /**
+     * 保存完成事件，仅本地事件，不会被云端触发
+     * @param user
+     */
     saved(user) {
     }
 
+    /**
+     * 更新事件，会被云端触发
+     * 保存的数据如果没有更新，并不会触发更新
+     * @param user
+     */
+    update(user) {
+
+    }
+
+    /**
+     * 即将删除事件，仅本地事件，不会被云端触发
+     * @param user
+     */
     beforeDelete(user) {
     }
 
+    /**
+     * 删除事件，会被云端触发
+     * @param user
+     */
     deleted(user) {
     }
 
-    childrenSaved(user) {
-    }
+    // 云触发事件,似乎也没啥意义
+    // visit(){}
+    // update(){}
+    // delete(){}
 
-    childrenPushed(key, id) {
-    }
-
-    childrenDeleted(user) {
-    }
+    // /**
+    //  * 尚未实装
+    //  * @param user
+    //  */
+    // childrenSaved(user) {
+    // }
+    //
+    // childrenIncreased(key, id) {
+    // }
+    //
+    // childrenDecreased(key, id) {
+    // }
 
     //
     // async then(resolve, reject) {
@@ -749,50 +1127,99 @@ export class yinObject {
  * yinObject自带的一些键值
  */
 
+export class yinMap {
 
-export function _mapProxy(map = {}) {
-    const _map = new Proxy({}, {
-        set(target, p, newValue) {
-            if (newValue instanceof Array) target[p] = _mapArrayProxy(newValue)
-            else {
-                if (newValue instanceof yinObject)
-                    target[p] = newValue._place
-                else
-                    target[p] = Place.create(newValue)
+    constructor(map) {
+        if (map instanceof Object) Object.assign(this, map)
+    }
+
+    static create(map) {
+        const _map = new Proxy(new yinMap(), {
+            set(target, p, newValue) {
+                if (newValue instanceof Array) target[p] = PlaceArray.create(newValue)
+                else {
+                    if (newValue instanceof yinObject)
+                        target[p] = newValue._place
+                    else
+                        target[p] = Place.create(newValue)
+                }
+                return true
             }
-            return true
+        })
+        Object.assign(_map, map)
+        return _map
+    }
+
+    /**
+     *
+     * @param {yinObject|Place|string} object
+     * @private
+     */
+    _at(object) {
+        const res = [], place = object instanceof yinObject ? object._place : object
+        for (let key in this) {
+            if (this[key] instanceof Array && this[key].includes(place)) res.push(key)
+            else if (this[key].valueOf() === place) res.push(key)
         }
-    })
-    Object.assign(_map, map)
-    return _map
+        return res
+    }
 }
 
-export function _mapArrayProxy(list) {
-    const _mapArray = new Proxy([], {
-        set(target, p, newValue) {
-            if (Number.isInteger(Number(p))) {
-                let value
-                if (newValue instanceof yinObject)
-                    value = newValue._place
-                else
-                    value = Place.create(newValue)
-                if (target.findIndex(v => v.valueOf() === v) === -1)
-                    target[p] = value
-                else
-                    return false
-            } else {
-                target[p] = newValue
-            }
-            return true
-        }
-    })
-    Object.assign(_mapArray, list)
-    return _mapArray
-}
+
+// export function _mapProxy(map = {}) {
+//     const _map = new Proxy({}, {
+//         set(target, p, newValue) {
+//             if (newValue instanceof Array) target[p] = _mapArrayProxy(newValue)
+//             else {
+//                 if (newValue instanceof yinObject)
+//                     target[p] = newValue._place
+//                 else
+//                     target[p] = Place.create(newValue)
+//             }
+//             return true
+//         }
+//     })
+//     Object.assign(_map, map)
+//     return _map
+// }
+
+// export function _mapArrayProxy(list) {
+//     const _mapArray = new Proxy([], {
+//         set(target, p, newValue) {
+//             if (Number.isInteger(Number(p))) {
+//                 let value
+//                 if (newValue instanceof yinObject)
+//                     value = newValue._place
+//                 else
+//                     value = Place.create(newValue)
+//                 if (target.findIndex(v => v.valueOf() === v) === -1)
+//                     target[p] = value
+//                 else
+//                     return false
+//             } else {
+//                 target[p] = newValue
+//             }
+//             return true
+//         }
+//     })
+//     Object.assign(_mapArray, list)
+//     return _mapArray
+// }
+
 
 export class Parents extends Array {
     get [Symbol.species]() {
         return Array;
+    }
+
+    constructor(ids, object) {
+        // console.log(ids, object)
+        if (ids instanceof Array)
+            super(...new Set(ids));
+        else
+            super(ids)
+        this.object = object
+        hideProperty(this, 'object')
     }
 
     push(...ids) {
@@ -803,8 +1230,46 @@ export class Parents extends Array {
         }
         return super.push(...list)
     }
-}
 
+    async fixed() {
+        const parents = [], yin = this.object._yin
+        for (let module of yin.modules) {
+            const fixes = await module.find({_maps: this.object._place.valueOf()})
+            await fixes.all()
+            for (let object of fixes) {
+                const keys = object._map._at(this.object)
+                parents.push(...keys.map(key => object._place.toKey(key)))
+            }
+        }
+        return parents
+    }
+
+    async all() {
+        const list = []
+        for (let p of this) {
+            list.push(new Place(this.object._name, p))
+        }
+        return list.concat(await this.fixed())
+    }
+
+    async main() {
+        return this.object._module.get(new Place(this.object._name, this[0]).id)
+    }
+
+
+    concat(...items) {
+        return [].concat(this, ...items)
+    }
+
+    async then(resolve, reject) {
+        try {
+            resolve(await this.all())
+        }
+        catch (e) {
+            reject(e)
+        }
+    }
+}
 
 export class ObjectKey {
     object
@@ -823,29 +1288,38 @@ export class ObjectKey {
     }
 
     async models() {
+        if (this.object._name === 'Model')
+            return []
         try {
             const parentModel = await this.object._model
-            if (parentModel._id !== this.object._id) {
-                const models = await parentModel[this.key]
-                return models._id ? [models] : models
-            }
-        } catch (e) {
+            if (parentModel[this.key])
+                return parentModel[this.key]
+            return []
+        }
+        catch (e) {
             return []
         }
     }
 
-    createWaiter(user) {
-        if (this.object._keyWaiter[this.key])
-            return this.object._keyWaiter[this.key]
-        this.object._keyWaiter[this.key] = this.create({}, user)
-        return this.object._keyWaiter[this.key]
-    }
+    // async createAutomate(user) {
+    //     if (this.object._waiter) {
+    //         await this.object._nextTick()
+    //         return this.auth(user)
+    //     }
+    //     // return this.create({}, user)
+    //     console.log(this.object._titlePlace, this.key, this.object._.keyWaiter[this.key])
+    //     if (this.object._.keyWaiter[this.key]) return this.object._.keyWaiter[this.key]
+    //     this.object._.keyWaiter[this.key] = this.create({}, user)
+    //     const object = await this.object._.keyWaiter[this.key]
+    //     delete this.object._.keyWaiter[this.key]
+    //     console.log(this.object._titlePlace, this.key, 'done!!!!')
+    //     return object
+    // }
 
     async create(object, user) {
-        const o = await this.object._createChild(object, this.key, user)
-        delete this.object._keyWaiter[this.key]
-        // console.log(o)
-        return o
+        const child = await this.object._createChild(object, this.key, user)
+        this.object._map[this.key] = child._place
+        return child
     }
 
     async remove() {
@@ -856,41 +1330,73 @@ export class ObjectKey {
         return this.object._save()
     }
 
+
     async auth(user) {
-        const object = this.object, yin = object._module.yin, k = this.key
+        const object = this.object, yin = object._module.yin, k = this.key, keyTitle = object._schemaMix[k]?.title || k
         if (/^_/.test(k))
             return yin[this.module].get(object[k], user)
 
         if (object._map[k] instanceof Array)
             object._map[k] = object._map[k][0]
 
-        try {
-            return await yin.get(object._map[k], user)
-        } catch (e) {
-            if (e.status === 'NOT_FOUND' && object._name !== 'Model') {
-                const model = object._.model
-                if (model && model._schema[k] && !model._schema[k].settings?.manualCreation) {
-                    try {
-                        const models = await model[k]
-                        if (models._id || models.length) {
-                            return await this.createWaiter(user)
-                        }
-                    } catch (e) {
-                        if (e.status !== 'NOT_FOUND')
-                            return Promise.reject(e)
+        if (object._map[k]) return yin.get(object._map[k], user)
+        else {
+            const model = object._.model
+            if (model && model._schema[k] && !model._schema[k].settings?.manualCreation) {
+                try {
+                    const models = await model[k]
+                    if (models.length) {
+                        return await this.create({}, user)
                     }
                 }
+                catch (e) {
+                    return yinStatus.NOT_FOUND(`在${object._title}.${keyTitle}自动创建子对象时发生错误`, e)
+                }
             }
-            return Promise.reject(e)
         }
+        return yinStatus.NOT_FOUND(`没有在${object._title}.${keyTitle}找到对象映射信息`)
+
+        // try {
+        //     return await yin.get(object._map[k], user)
+        // }
+        // catch (e) {
+        //     if (e.status === 'NOT_FOUND' && object._name !== 'Model') {
+        //         const model = object._.model
+        //         if (model && model._schema[k] && !model._schema[k].settings?.manualCreation) {
+        //             try {
+        //                 const models = await model[k]
+        //                 if (models.length) {
+        //                     return await this.createWaiter(user)
+        //                 }
+        //             }
+        //             catch (e) {
+        //                 if (e.status !== 'NOT_FOUND')
+        //                     return Promise.reject(e)
+        //             }
+        //         }
+        //     }
+        //     return Promise.reject(e)
+        // }
     }
 
+    // get value() {
+    //     if (/^_/.test(this.key))
+    //         return this.object[this.key]
+    //     else
+    //         return this.object._map[this.key]
+    // }
+
     get place() {
-        const k = this.key
-        if (/^_/.test(k))
-            return new Place(this.module, this.object[k])
-        return this.object._map[k]
+        if (/^_/.test(this.key)) if (this.object[this.key])
+            return new Place(this.module, this.object[this.key])
+        return this.object._map[this.key]
     }
+
+    get cache() {
+        if (this.place)
+            return this.object._module.yin.getFromCache(this.place)
+    }
+
 
     toJSON() {
         if (/^_/.test(this.key) && this.object[this.key])
@@ -903,18 +1409,19 @@ export class ObjectKey {
         return this.toJSON()
     }
 
+
     async then(resolve, reject) {
-        // console.log(this.object._title, this.key, 'then======================>')
         try {
             resolve(await this.auth())
-        } catch (e) {
+        }
+        catch (e) {
             reject(e)
         }
     }
 }
 
 export class ArrayKey {
-    finder = null
+    finder = undefined
     index
     /**
      * 开放创建
@@ -926,17 +1433,31 @@ export class ArrayKey {
     constructor(object, key, value) {
         hideProperty(this, 'object')
         hideProperty(this, 'key')
-        if (value)
-            Object.assign(this, value)
+        if (value) Object.assign(this, value)
         this.object = object
         this.key = key
+    }
+
+    static _create(object, key, value = {index: {default: {}}}) {
+        if (!value) value = {}
+        value.index ??= {default: {}}
+        value.index.default ??= {}
+        return new ArrayKey(object, key, value)
     }
 
     static create(object, key, value = {}) {
         value.index ??= {default: {}}
         value.index.default ??= {}
         value.index = this.indexesProxy(object, key, value.index)
+        // console.assert(false, object._titlePlace, key, value)
+        // if (object._isYinProxy)
+        //     console.assert(false, object._titlePlace, key)
+        // else
+        //     console.assert(false, object._titlePlace, key, object)
+
         return new Proxy(new ArrayKey(object, key, value), {
+            // construct(target, argArray, newTarget) {
+            // },
             deleteProperty: (target, p) => {
                 delete target[p]
                 this.pull(object, key)
@@ -953,14 +1474,17 @@ export class ArrayKey {
                         async then(resolve, reject) {
                             try {
                                 resolve(await this.auth())
-                            } catch (e) {
+                            }
+                            catch (e) {
                                 reject(e)
                             }
                         }
                     }
+                else if (p === '_isYinProxy') return true
                 return target[p]
             },
             set: (target, p, value, proxy) => {
+                // console.log('ArrayKey', p, value)
                 if (p === 'index')
                     target.index = this.indexesProxy(object, key, value)
                 else
@@ -982,6 +1506,8 @@ export class ArrayKey {
                 return true
             },
             set: (target, p, value, proxy) => {
+                // console.log('indexes', p, value)
+
                 target[p] = this.indexProxy(object, p, key, value)
                 this.pull(object, key, p)
                 return true
@@ -997,6 +1523,8 @@ export class ArrayKey {
                 return true
             },
             set: (target, p, value, proxy) => {
+                // console.log('index', p, value)
+
                 target[p] = value
                 this.pull(object, key, i)
                 return true
@@ -1005,10 +1533,9 @@ export class ArrayKey {
     }
 
 
-    static findChange(object, key, value = {}) {
+    static findChange(object, key, value = {finder: null, index: {default: {}}}) {
         const _value = object[key]
-        // console.log(!_value.finder !== !value.finder, JSON.stringify(_value.finder) !== JSON.stringify(value.finder))
-        if (!_value.finder !== !value.finder || JSON.stringify(_value.finder) !== JSON.stringify(value.finder)) {
+        if ((!_value.finder) !== (!value.finder) || (_value.finder && value.finder && JSON.stringify(_value.finder) !== JSON.stringify(value.finder))) {
             const list = {}
             for (let i in value.index) {
                 list[i] = true
@@ -1023,7 +1550,7 @@ export class ArrayKey {
         this.findIndexChange(object, key, value.index)
     }
 
-    static findIndexChange(object, key, index = {}) {
+    static findIndexChange(object, key, index = {default: {}}) {
         const refreshList = {}, _index = object[key].index
         for (let i in _index) {
             refreshList[i] = !(index[i] && JSON.stringify(_index[i]) === JSON.stringify(index[i]));
@@ -1031,7 +1558,6 @@ export class ArrayKey {
         for (let i in index) {
             refreshList[i] ??= true
         }
-        // console.log(refreshList)
         for (let i in refreshList) {
             if (refreshList[i])
                 this.refreshChildren(object, key, i)
@@ -1039,10 +1565,13 @@ export class ArrayKey {
     }
 
     static pull(object, key, index) {
-        // console.log('array key pull')
-        object._module.pull(object, key, object[key])
-        if (index)
-            this.refreshChildren(object, key, index)
+        // console.log('array key pull', object._titlePlace, key, index, object[key])
+        // ArrayKey初始化时，值还没有被付到对象的key上，此时不应推送和刷新
+        if (object[key]?._isYinProxy) {
+            object._module.pull(object, key, object[key])
+            if (index)
+                this.refreshChildren(object, key, index)
+        }
     }
 
     static refreshChildren(object, key, i) {
@@ -1052,13 +1581,13 @@ export class ArrayKey {
 
 
     async models() {
+        if (this.object._name === 'Model')
+            return []
         try {
             const parentModel = await this.object._model
-            if (parentModel._id !== this.object._id) {
-                const models = await parentModel[this.key]
-                return models._id ? [models] : models
-            }
-        } catch (e) {
+            return await parentModel[this.key]
+        }
+        catch (e) {
             return []
         }
     }
@@ -1087,7 +1616,85 @@ export class ArrayKey {
     async then(resolve, reject) {
         try {
             resolve(await this.auth())
-        } catch (e) {
+        }
+        catch (e) {
+            reject(e)
+        }
+    }
+}
+
+export class FileKey extends yinFilePath {
+    object
+    key
+
+    constructor(path, object, key) {
+        // console.log(object, path, key)
+        super(path || '')
+        this.object = object
+        this.key = key
+    }
+
+    uploadProgress
+
+
+    eventProgress
+    // create(file, user) {
+    //     return this.object._upload(file, this.key, p => {
+    //         if (this.uploadProgress instanceof Function)
+    //             this.uploadProgress(p)
+    //     }, user)
+    // }
+
+    /**
+     * 创建文件
+     * @param {String} name 文件名或文件描述符
+     * @param data
+     * @param user
+     */
+    create(name, data, user) {
+        this.abortController = new AbortController();
+        return this.object._upload(name, data, this.key, {
+            onUploadProgress: p => {
+                this.eventProgress = p.event
+                if (this.uploadProgress instanceof Function)
+                    this.uploadProgress(p)
+            },
+            signal: this.abortController.signal
+        }, user)
+    }
+
+    abort() {
+        this.abortController.abort()
+    }
+
+
+    // async auth(user) {
+    //     const object = this.object, yin = object._module.yin, k = this.key
+    //     if (/^_/.test(k))
+    //         return yin.File.getPath(this, user)
+    //
+    //     if (object._map[k] instanceof Array)
+    //         object._map[k] = object._map[k][0]
+    //
+    //     try {
+    //         return yin.get(object._map[k], user)
+    //     }
+    //     catch (e) {
+    //         return yin.File.getPath(this, user)
+    //     }
+    // }
+
+    async auth(user) {
+        if (String(this))
+            return this.object._yin.File.getPath(this, user)
+        return yinStatus.NOT_FOUND('地址为空')
+    }
+
+    async then(resolve, reject) {
+        try {
+            resolve(await this.auth())
+        }
+        catch (e) {
             reject(e)
         }
     }

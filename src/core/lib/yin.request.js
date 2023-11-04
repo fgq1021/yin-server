@@ -1,24 +1,27 @@
 import axios from "axios";
 import {ResList} from "../core/array.js";
+import {yinError} from "./yin.status.js";
+import {yinByteParse, yinTimeParse} from "./yin.assign.js";
 
 export class yinRequest {
     yin
     path
     controller
     req = axios
+    __v_skip = true
 
     constructor(yin, path) {
         this.yin = yin
-        if (path instanceof String) {
+        if (typeof path === 'string')
             this.path = path.replace(/^\//, '').replace(/\/$/, '')
-        } else
+        else
             this.controller = path
     }
 
     get api() {
         if (this.path || this.controller)
-            return `${this.yin.url}.object/${this.path || this.controller?.name}/`
-        return `${this.yin.url}.object/`
+            return `${this.yin.url}/yin.object/${this.path || this.controller?.name}/`
+        return `${this.yin.url}/yin.object/`
     }
 
     async res(promise) {
@@ -30,68 +33,90 @@ export class yinRequest {
                 return new ResList(res.list, res)
             else
                 return res
-        } catch (err) {
-            if (err.response)
-                return Promise.reject(err.response.data)
+        }
+        catch (err) {
+            // console.log(err)
+            if (err.response) {
+                const ye = new yinError()
+                Object.assign(ye, err.response.data)
+                return Promise.reject(ye)
+            }
             else
                 return Promise.reject(err)
         }
     }
 
-    config(uploadProgress, downloadProgress) {
-        const config = {
-            headers: {}
-        }
+    makeProgress(progress) {
+        progress._progress = `${(progress.progress * 100).toFixed(1)}%`
+        progress._rate = yinByteParse.speed(progress.rate)
+        progress._loaded = yinByteParse.size(progress.loaded)
+        progress._total = yinByteParse.size(progress.total)
+        progress._estimated = yinTimeParse.left(Math.round(progress.estimated * 1000) + 1000)
+        return progress
+    }
+
+    config(config) {
         if (this.yin.me._token) {
-            config.headers["Authorization"] = "Bearer " + this.yin.me._token;
+            config.headers ??= {}
+            config.headers["Authorization"] = "Bearer " + this.yin.me._token
         }
-        if (uploadProgress)
-            config.onUploadProgress = ({loaded, total, progress, bytes, estimated, rate, upload}) => {
-                console.log(loaded, total, progress, bytes, estimated, rate, upload)
-                uploadProgress(Math.round((loaded * 10000) / total) / 10000)
+        if (config.onUploadProgress instanceof Function) {
+            const fn = config.onUploadProgress
+            config.onUploadProgress = p => {
+                this.makeProgress(p)
+                fn(p)
             }
-        if (downloadProgress)
-            config.onDownloadProgress = ({loaded, total, progress, bytes, estimated, rate, download}) => {
-                console.log(loaded, total, progress, bytes, estimated, rate, download)
-                uploadProgress(Math.round((loaded * 10000) / total) / 10000)
+        }
+        if (config.onDownloadProgress instanceof Function) {
+            const fn = config.onDownloadProgress
+            config.onDownloadProgress = p => {
+                this.makeProgress(p)
+                fn(p)
             }
+        }
         return config;
     }
 
-    configWithData(data, uploadProgress, downloadProgress) {
-        const config = this.config(uploadProgress, downloadProgress)
-        if (typeof data === 'object')
-            config.headers["Content-Type"] = 'application/json'
-        else
-            config.headers["Content-Type"] = 'text/plain'
+    configWithParams(data, config) {
+        config ??= {}
+        this.config(config)
+        if (data) config.params = data
         return config
     }
 
-    get(url = '', uploadProgress, downloadProgress) {
-        return this.res(this.req.get(this.api + url, this.config(uploadProgress, downloadProgress)))
+    configWithData(data, config) {
+        config ??= {}
+        this.config(config)
+        // 当通过自定义功能发送字符串时，需要改一下Content-Type，不然会发送Json
+        if (typeof data === 'string') config.headers["Content-Type"] = 'text/plain'
+        return config
     }
 
-    delete(url = '', uploadProgress, downloadProgress) {
-        return this.res(this.req.delete(this.api + url, this.config(uploadProgress, downloadProgress)))
+    get(url = '', data, config) {
+        return this.res(this.req.get(this.api + url, this.configWithParams(data, config)))
     }
 
-    head(url = '', uploadProgress, downloadProgress) {
-        return this.res(this.req.head(this.api + url, this.config(uploadProgress, downloadProgress)))
+    delete(url = '', data, config) {
+        return this.res(this.req.delete(this.api + url, this.configWithParams(data, config)))
     }
 
-    options(url = '', uploadProgress, downloadProgress) {
-        return this.res(this.req.options(this.api + url, this.config(uploadProgress, downloadProgress)))
+    head(url = '', data, config) {
+        return this.res(this.req.head(this.api + url, this.configWithParams(data, config)))
     }
 
-    post(url = '', data, uploadProgress, downloadProgress) {
-        return this.res(this.req.post(this.api + url, data, this.configWithData(data, uploadProgress, downloadProgress)))
+    options(url = '', data, config) {
+        return this.res(this.req.options(this.api + url, this.configWithParams(data, config)))
     }
 
-    put(url = '', data, uploadProgress, downloadProgress) {
-        return this.res(this.req.put(this.api + url, data, this.configWithData(data, uploadProgress, downloadProgress)))
+    post(url = '', data, config) {
+        return this.res(this.req.post(this.api + url, data, this.configWithData(data, config)))
     }
 
-    patch(url = '', data, uploadProgress, downloadProgress) {
-        return this.res(this.req.patch(this.api + url, data, this.configWithData(data, uploadProgress, downloadProgress)))
+    put(url = '', data, config) {
+        return this.res(this.req.put(this.api + url, data, this.configWithData(data, config)))
+    }
+
+    patch(url = '', data, config) {
+        return this.res(this.req.patch(this.api + url, data, this.configWithData(data, config)))
     }
 }
