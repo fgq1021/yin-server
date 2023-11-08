@@ -473,6 +473,7 @@ export class yinObject {
             else schemaMix[i] = key
         }
         return schemaMix
+      //  return this._schema.concat(this._.model?._schema || [])
     }
 
     _mapSchema() {

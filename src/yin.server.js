@@ -106,8 +106,11 @@ export class YinServer extends Yin {
 
     async connectMongo(url) {
         console.log(...yinConsole.log("数据库连接开始"));
+        const envDb = process.env['yin.db']
         if (url) this.system.db = url
+        else if (envDb) this.system.db = this.system.db.replace(/mongodb:\/\/.+\//, envDb)
         const mongoUri = this.system.db
+        console.log(mongoUri, process.env['yin.db'])
         try {
             console.log(...yinConsole.log(`数据库: ${mongoUri} 连接中`));
             await connect(mongoUri)

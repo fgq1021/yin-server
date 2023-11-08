@@ -1,5 +1,5 @@
 import {Module} from "../core/module.js";
-import { Schema, yinObject} from "../core/object.js";
+import {Schema, yinObject} from "../core/object.js";
 import {Key} from "../core/key.js";
 import {Types} from "../core/type.js";
 
@@ -110,15 +110,16 @@ export class ModelModule extends Module {
     Key = Key
 
     clearCache() {
-      //  console.log(...yinConsole.warn(`#${this.name}`, '不参与内存回收'))
+        //  console.log(...yinConsole.warn(`#${this.name}`, '不参与内存回收'))
     }
 
-    update(model) {
-        for (let o of this.yin.cacheList) {
-            if (o._model?.valueOf() === model._id) {
-                o._mapSchema(model._schema)
+    async update(model, user, at) {
+        if (!at)
+            for (let o of this.yin.cacheList) {
+                if (o._model?.valueOf() === model._id) {
+                    o._mapSchema(model._schema)
+                }
             }
-        }
     }
 }
 
